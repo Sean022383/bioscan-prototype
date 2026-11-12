@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f8f6ef">
+  <title>Reservation | BioScan Laboratories</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="sample-data.js" defer></script>
+  <script src="data.js" defer></script>
+  <script src="reservation.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="public-header">
+  <div class="wrap header-inner">
+    <a class="brand" href="index.html" aria-label="BioScan Laboratories home"><span class="brand-logo" aria-hidden="true"><img src="assets/bioscan-logo.png" alt="" width="382" height="512"></span><span>BioScan<span class="brand-sub">Laboratories</span></span></a>
+    <nav aria-label="Main navigation">
+      <a href="index.html#services">Diagnostic Services</a>
+      <a href="index.html#clinic">Clinic Information</a>
+      <a class="nav-reservation" href="reservation.html" aria-current="page">Reservation</a>
+    </nav>
+  </div>
+</header>
+<main id="main" class="wrap reservation-page" tabindex="-1">
+  <div class="section-heading"><h1>Make a Reservation</h1><p>Choose your Diagnostic Services and appointment. Your Reservation Code will be available after verification.</p></div>
+  <ol class="stepper" id="steps" aria-label="Reservation progress">
+    <li><span>1</span>Services</li><li><span>2</span>Client details</li><li><span>3</span>Date and time</li><li><span>4</span>Verification</li><li><span>5</span>Confirmation</li>
+  </ol>
+  <div class="reservation-grid">
+    <section class="panel reservation-work" id="reservation-work" aria-label="Reservation step"></section>
+    <aside class="panel reservation-summary" id="reservation-summary" aria-label="Reservation summary"></aside>
+  </div>
+</main>
+<footer class="public-footer"><div class="wrap footer-inner">
+  <a class="brand footer-brand" href="index.html"><span class="brand-logo" aria-hidden="true"><img src="assets/bioscan-logo.png" alt="" width="382" height="512"></span><span>BioScan<span class="brand-sub">Laboratories</span></span></a>
+  <span id="reservation-footer-address">6 Lanzones Street, Potrero, Metro Manila</span><a href="staff.html">Staff Sign In</a>
+</div></footer>
+</body>
+</html>
