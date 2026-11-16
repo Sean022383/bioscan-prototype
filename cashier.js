@@ -32,7 +32,7 @@ const Cashier = (() => {
 
   function totals(state) {
     const subtotal = sum(draft.items);
-    const eligible = sum(draft.items.filter(item => item.eligible));
+    const eligible = subtotal;
     const decision = approval(state);
     let amount = 0;
     let label = '';
@@ -194,12 +194,26 @@ const Cashier = (() => {
   function findReservation() {
     const hold = Recovery.checkoutBlock(B.read(), true);
     if (hold) { say(hold, true); return; }
-    startDialog('Find Reservation', '<label>Reservation Code<input name="code" placeholder="BS-…" required autocomplete="off"></label>',
+    startDialog('Find Reservation', '<label>Reservation code or client name<input name="code" placeholder="BS-… or client name" required autocomplete="off"></label><div id="reservation-matches"></div>',
       form => {
         const state = B.read();
         const hold = Recovery.checkoutBlock(state, true);
         if (hold) throw Error(hold);
-        const code = form.elements.code.value.trim().toUpperCase();
+        const query = form.elements.code.value.trim();
+        const matches = form.querySelector('#reservation-matches');
+        let code = query.toUpperCase();
+        if (matches.dataset.query === query && form.elements.match) code = form.elements.match.value;
+        if (!state.reservations.some(item => item.code === code)) {
+          const results = B.filterReservations(state, '', '', query);
+          if (!results.length) throw Error('No reservation matches this code or client name.');
+          matches.dataset.query = query;
+          matches.innerHTML = '<label>Choose the matching reservation<select name="match" required><option value="">Select a reservation</option>' + results.map(item => {
+            const client = state.profiles.find(p => p.id === item.clientId);
+            return '<option value="' + B.safe(item.code) + '">' + B.safe(client?.fullName || 'Client') + ' · ' + B.safe(item.code) + ' · ' + B.safe(B.appointment(item.date, item.time)) + ' · ' + B.safe(B.reservationStatus(item)) + '</option>';
+          }).join('') + '</select></label><p class="quiet">Confirm the client and appointment before retrieving.</p>';
+          form.elements.match.focus();
+          return false;
+        }
         const reservation = state.reservations.find(item => item.code === code);
         if (!reservation) throw Error('Reservation Code not found. Check the code and try again.');
         const status = B.reservationStatus(reservation);
@@ -210,6 +224,11 @@ const Cashier = (() => {
         say('Reservation retrieved for ' + profile.fullName + '.');
         refresh();
       }, 'Retrieve Reservation');
+    Staff.modal.querySelector('[name="code"]').addEventListener('input', () => {
+      const matches = Staff.modal.querySelector('#reservation-matches');
+      matches.replaceChildren();
+      delete matches.dataset.query;
+    });
   }
 
   function walkIn(serviceId) {
@@ -297,7 +316,7 @@ const Cashier = (() => {
         draft.items.push(...lines);
       }
     }
-    if (!draft.items.length || (!draft.items.some(item => item.eligible) && ['senior', 'pwd'].includes(draft.discount?.kind))) draft.discount = null;
+    if (!draft.items.length) draft.discount = null;
     save();
     refresh(remove ? '[data-action="add"][data-id="' + id + '"]' : undefined);
     if (!remove) {
@@ -321,17 +340,13 @@ const Cashier = (() => {
     if (value === 'override' && approval(state)?.status === 'Approved') return;
     refresh('#discount-type');
     if (value === 'senior' || value === 'pwd') {
-      if (!draft.items.some(item => item.eligible)) {
-        say('Select a Discount Eligible service before applying this discount.', true);
-        return;
-      }
       Staff.dialog(value === 'senior' ? 'Senior Citizen discount' : 'PWD discount',
-        '<p>Apply 20% to the Discount Eligible services in this sale.</p>' +
+        '<p>Apply 20% to all services, including bundle prices. This replaces any other discount; coupons cannot be combined.</p>' +
         '<label class="check-row"><input type="checkbox" required><span>I checked the Client’s eligibility.</span></label>',
         () => applyDiscount({ kind: value }), { submitLabel: 'Apply Discount' });
     }
     if (value === 'coupon') {
-      Staff.dialog('Apply Coupon', '<label>Coupon code<input name="code" required autocomplete="off"></label>', form => {
+      Staff.dialog('Apply Coupon', '<p>This replaces any Senior Citizen, PWD, or other discount. Discounts cannot be combined.</p><label>Coupon code<input name="code" required autocomplete="off"></label>', form => {
         const previous = draft.discount;
         const previousId = draft.approvalId;
         const code = form.elements.code.value.trim().toUpperCase();

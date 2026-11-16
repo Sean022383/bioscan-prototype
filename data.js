@@ -364,8 +364,10 @@ const Bioscan = (() => {
       .map(category => '<option>' + safe(category) + '</option>').join('');
   }
   function alphabetical(a, b) { return a.localeCompare(b, 'en', { sensitivity: 'base', numeric: true }); }
-  function filterReservations(state, date = '', status = '') {
-    return state.reservations.filter(r => (!date || r.date === date) && (!status || reservationStatus(r) === status))
+  function filterReservations(state, date = '', status = '', query = '') {
+    const search = query.trim().toLowerCase();
+    return state.reservations.filter(r => (!date || r.date === date) && (!status || reservationStatus(r) === status) &&
+      (!search || r.code.toLowerCase().includes(search) || state.profiles.find(p => p.id === r.clientId)?.fullName.toLowerCase().includes(search)))
       .slice().sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
   }
   function validSlot(state, date, time, exceptCode, serviceIds = []) {
@@ -414,7 +416,7 @@ const Bioscan = (() => {
   function healthSummary(health = {}) {
     const labels = { bloodType: 'Blood type', pregnancy: 'Pregnancy status', conditions: 'Known conditions', medicines: 'Medicines and supplements', allergies: 'Allergies' };
     return '<h3>Self-reported health information</h3><dl class="detail-list">' + Object.entries(labels).map(([key, label]) =>
-      '<div><dt>' + label + '</dt><dd>' + safe(health[key] || 'Unknown') + (health[key] === 'Provide details' ? ': ' + safe(health[key + 'Details'] || 'No details supplied') : '') + '</dd></div>').join('') + '</dl>';
+      '<div><dt>' + label + '</dt><dd>' + safe(health[key] === 'Provide details' ? (health[key + 'Details'] || 'No details supplied') : (health[key] || 'Unknown')) + '</dd></div>').join('') + '</dl>';
   }
   function bindHealth(form) {
     const refresh = () => form.querySelectorAll('[data-health-detail]').forEach(label => {

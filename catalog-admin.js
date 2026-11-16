@@ -24,7 +24,7 @@ const CatalogAdmin = (() => {
       const item = { label: text(values.name, 'a service name', 100), category: text(values.category, 'a category', 80),
         price: price(values.price), description: text(values.description, 'a service description', 1500),
         preparation: text(values.preparation, 'preparation instructions', 2000), alias: String(values.alias || '').trim().slice(0, 80),
-        eligible: Boolean(values.eligible), available: Boolean(values.available) };
+        eligible: true, available: Boolean(values.available) };
       if (!B.catalog.some(s => s.category === item.category)) throw Error('Choose a valid diagnostic category.');
       if (B.services(state).some(s => s.id !== id && s.label.toLowerCase() === item.label.toLowerCase())) throw Error('A service with that name already exists.');
       if (id && !B.services(state).some(s => s.id === id)) throw Error('This service no longer exists.');
@@ -65,7 +65,7 @@ const CatalogAdmin = (() => {
       '<label>About this service<textarea name="description" maxlength="1500" required>' + B.safe(info.description || '') + '</textarea></label>' +
       '<label>Before your visit / preparation<textarea name="preparation" maxlength="2000" required>' + B.safe(info.preparation || '') + '</textarea></label>' +
       input('Alternative search name (optional)', 'alias', item?.alias, 'maxlength="80"') +
-      '<label class="check-row"><input type="checkbox" name="eligible"' + (item?.eligible ? ' checked' : '') + '><span>Discount Eligible</span></label>' +
+      '<p class="quiet">Senior Citizen and PWD discounts apply to all services, including bundles. Only one discount can be used per transaction.</p>' +
       '<label class="check-row"><input type="checkbox" name="available"' + (!item || item.available ? ' checked' : '') + '><span>Available in catalog, POS, and Reservation</span></label>', async form => {
         const data = new FormData(form);
         await saveService({ ...Object.fromEntries(data), eligible: data.has('eligible'), available: data.has('available'), editing: Boolean(id) }, id);

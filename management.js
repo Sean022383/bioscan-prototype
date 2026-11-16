@@ -5,6 +5,7 @@ const Management = (() => {
   let section = 'approvals';
   let reservationDate = '';
   let reservationStatus = '';
+  let reservationQuery = '';
   let serviceQuery = '';
   let reportPeriod = '30';
   let reportDate = B.day();
@@ -22,7 +23,7 @@ const Management = (() => {
       ['audit', 'Audit Log'], ['backup', 'Backup and Recovery'], ['corrections', 'Transaction Corrections']]
   };
 
-  function reset() { section = 'approvals'; reservationDate = ''; reservationStatus = ''; serviceQuery = ''; reportPeriod = '30'; reportDate = B.day(); reportStart = B.day(-29); reportEnd = B.day(); Office.reset(); }
+  function reset() { section = 'approvals'; reservationDate = ''; reservationStatus = ''; reservationQuery = ''; serviceQuery = ''; reportPeriod = '30'; reportDate = B.day(); reportStart = B.day(-29); reportEnd = B.day(); Office.reset(); }
 
   function table(headers, rows, fallback) {
     if (!rows.length) return '<p class="empty">' + B.safe(fallback) + '</p>';
@@ -94,6 +95,14 @@ const Management = (() => {
       draw(role);
       region.querySelector('#reservation-status').focus();
     });
+    region.querySelector('#reservation-search')?.addEventListener('input', event => {
+      reservationQuery = event.target.value;
+      const cursor = event.target.selectionStart;
+      draw(role);
+      const input = region.querySelector('#reservation-search');
+      input.focus({ preventScroll: true });
+      input.setSelectionRange(cursor, cursor);
+    });
     region.querySelector('#management-search')?.addEventListener('input', event => {
       serviceQuery = event.target.value;
       region.querySelector('#service-admin-list').innerHTML = serviceTable(B.read());
@@ -118,7 +127,7 @@ const Management = (() => {
     }
     if (['bundles', 'care', 'approvals', 'reservations', 'audit', 'reports', 'corrections', 'coupons', 'staff', 'backup', 'profiles', 'closures', 'sms', 'issues', 'settings', 'clinic', 'roles'].includes(section)) {
       const active = document.activeElement;
-      if (['reservation-filter', 'reservation-status', 'client-directory-search'].includes(active?.id)) return;
+      if (['reservation-filter', 'reservation-status', 'reservation-search', 'client-directory-search'].includes(active?.id)) return;
       draw(role);
     }
   }
@@ -157,9 +166,9 @@ const Management = (() => {
   }
 
   function reservations(state) {
-    const records = B.filterReservations(state, reservationDate, reservationStatus);
+    const records = B.filterReservations(state, reservationDate, reservationStatus, reservationQuery);
     return note('Filter Reservations by appointment date and status. Authorized staff can reschedule or cancel a Confirmed Reservation.') +
-      '<div class="reservation-filters"><label>Appointment date<input id="reservation-filter" type="date" value="' + B.safe(reservationDate) +
+      '<label>Find reservation<input id="reservation-search" type="search" placeholder="Reservation code or client name" value="' + B.safe(reservationQuery) + '"></label><div class="reservation-filters"><label>Appointment date<input id="reservation-filter" type="date" value="' + B.safe(reservationDate) +
       '"></label><label>Status<select id="reservation-status"><option value="">All statuses</option>' + ['Cancelled', 'Completed', 'Confirmed', 'No-Show'].map(status => '<option' + (reservationStatus === status ? ' selected' : '') + '>' + status + '</option>').join('') + '</select></label></div>' +
       '<p class="quiet section-note" role="status">' + records.length + (records.length === 1 ? ' reservation' : ' reservations') + '</p>' + table(['Reservation Code', 'Client', 'Appointment', 'Status', 'Actions'], records.map(item => {
         const status = B.reservationStatus(item);
@@ -227,10 +236,10 @@ const Management = (() => {
   }
 
   function serviceTable(state) {
-    return table(['Diagnostic Service', 'Price', 'Availability', 'Discount Eligible', 'Action'],
+    return table(['Diagnostic Service', 'Price', 'Availability', 'Senior/PWD discount', 'Action'],
       B.search(B.services(state), serviceQuery).map(item => [
         B.safe(item.label) + '<small>' + B.safe(item.category) + '</small>', amount(item.price),
-        B.status(item.available ? 'Available' : 'Unavailable'), item.eligible ? 'Yes' : 'No',
+        B.status(item.available ? 'Available' : 'Unavailable'), '20%',
         '<button class="button secondary small" data-service="' + item.id + '" aria-label="Edit ' +
         B.safe(item.label) + '">Edit</button>'
       ]), 'No services match your search.');
