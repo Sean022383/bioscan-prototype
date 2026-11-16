@@ -1,0 +1,38 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const vm = require('node:vm');
+const fs = require('node:fs');
+const path = require('node:path');
+const { webcrypto } = require('node:crypto');
+test('demo reset replaces operational history once and preserves every staff account', () => {
+  const data = new Map();
+  const ctx = vm.createContext({ crypto: webcrypto, Intl, Date, structuredClone, setInterval() {}, navigator: {},
+    localStorage: { getItem: k => data.get(k) || null, setItem: (k,v) => data.set(k,String(v)) }, sessionStorage: { getItem: () => null } });
+  for (const file of ['sample-data.js','data.js']) vm.runInContext(fs.readFileSync(path.join(__dirname,'..',file),'utf8'),ctx);
+  vm.runInContext('globalThis.B = Bioscan',ctx);
+  const B = ctx.B, old = B.read();
+  old.staffAccounts[0].fullName = 'Preserved staff name';
+  old.staffAccounts[0].hash = 'preserved-password-hash';
+  const accounts = JSON.stringify(old.staffAccounts);
+  delete old.demoResetVersion;
+  old.sales.push({ id: 'OLD-SALE' });
+  old.sms.push({ id: 'OLD-SMS' });
+  old.profiles.push({ id: 'OLD-PROFILE' });
+  old.databaseRecovery = { archive: { stale: {} } };
+  ctx.localStorage.setItem(B.key,JSON.stringify(old));
+  const fresh = B.read();
+  assert.equal(JSON.stringify(fresh.staffAccounts), accounts);
+  for (const key of ['sales','reservations','sms','profiles']) assert.ok(fresh[key].length >= 30,key);
+  assert.ok(!fresh.sales.some(s => s.id === 'OLD-SALE'));
+  assert.ok(!fresh.sms.some(s => s.id === 'OLD-SMS'));
+  assert.ok(!fresh.profiles.some(s => s.id === 'OLD-PROFILE'));
+  assert.equal(fresh.databaseRecovery,undefined);
+  assert.ok(fresh.referrals.length > 0);
+  assert.ok(fresh.careRecords.some(s => s.status === 'Completed'));
+  assert.ok(fresh.sms.some(s => s.status === 'Failed'));
+  assert.ok(fresh.sales.every(s => s.items.length && s.receiptQueue && fresh.profiles.some(p => p.id === s.clientId)));
+  fresh.sales.push({ id: 'NEW-DEMO-WORK' });
+  ctx.localStorage.setItem(B.key,JSON.stringify(fresh));
+  assert.ok(B.read().sales.some(s => s.id === 'NEW-DEMO-WORK'));
+  console.log(JSON.stringify(Object.fromEntries(['sales','reservations','profiles','sms','referrals'].map(k=>[k,fresh[k].length]))));
+});

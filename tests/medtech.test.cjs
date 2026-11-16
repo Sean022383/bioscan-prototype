@@ -18,6 +18,9 @@ function fixture() {
   vm.runInContext('globalThis.B = Bioscan; globalThis.M = Medtech', ctx);
   const { B, M } = ctx;
   const state = B.read();
+  state.profiles = [{ id: 'CL-1001', fullName: 'Mara Santos', mobile: '09170000001', age: 34, sex: 'Female' }];
+  state.careRecords = [];
+  state.referrals = [];
   state.sales = [{ id: 'SALE-TEST', clientId: 'CL-1001', client: 'Mara Santos', reservation: 'RES-TEST', at: new Date().toISOString(), items: B.serviceLines(['cbc', 'fbs', 'urinalysis'], state) }];
   state.reservations = [{ code: 'RES-TEST', clientId: 'CL-1001', date: B.day(1), time: '08:00', status: 'Completed', items: state.sales[0].items },
     { code: 'UNPAID', clientId: 'CL-1001', date: B.day(2), time: '08:00', status: 'Confirmed', items: B.serviceLines(['cbc'], state) }];

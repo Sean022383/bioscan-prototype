@@ -24,7 +24,10 @@ const SampleData = (() => {
       const n = profiles.length;
       const item = { id: 'CL-S' + String(n + 1).padStart(4, '0'),
         fullName: firstNames[n % firstNames.length] + ' ' + lastNames[Math.floor(n / firstNames.length) % lastNames.length],
-        mobile: '0917111' + String(n + 1).padStart(4, '0'), age: 20 + n * 7 % 58, sex: n % 2 ? 'Male' : 'Female' };
+        mobile: '0917111' + String(n + 1).padStart(4, '0'), age: 20 + n * 7 % 58, sex: n % 2 ? 'Male' : 'Female',
+        health: { bloodType: ['Unknown', 'O+', 'A+', 'Prefer not to say'][n % 4], pregnancy: 'Unknown',
+          conditions: n % 7 === 0 ? 'Provide details' : 'None', conditionsDetails: n % 7 === 0 ? 'Sample: hypertension (self-reported)' : '', medicines: 'Unknown', allergies: 'None' },
+        consent: { data: true, at: at(day(-31), '08:00'), recordedBy: 'Demo front desk' } };
       profiles.push(item);
       return item;
     }
@@ -32,8 +35,12 @@ const SampleData = (() => {
     function appointment(client, offset, time, status, items) {
       const date = day(offset);
       const item = { code: 'BS-S' + String(reservations.length + 1).padStart(5, '0'), clientId: client.id,
-        date, time, status, items };
+        date, time, status, items, health: structuredClone(client.health),
+        consent: { data: true, preparation: true, at: at(day(offset - 1), '15:00') } };
       reservations.push(item);
+      state.sms.push({ id: 'SMS-DEMO-' + item.code, type: 'Reservation confirmation', mobile: client.mobile,
+        message: 'DEMO: BioScan reservation ' + item.code + ' confirmed for ' + date + ' at ' + time + '. Bring your reservation code and follow your test preparation instructions.',
+        reservation: item.code, key: 'demo-confirm-' + item.code, status: reservations.length % 12 === 0 ? 'Failed' : 'Delivered', at: item.consent.at });
       event('Client', 'Reservation confirmed', item.code, at(day(offset - 1), '15:00'));
       if (status === 'Cancelled' || status === 'No-Show') event(roles.manager, 'Reservation ' + status.toLowerCase(),
         item.code, at(day(status === 'No-Show' ? offset + 1 : offset), '07:00'));
@@ -63,8 +70,19 @@ const SampleData = (() => {
           label: useCoupon ? 'Coupon · Wellness 10' : statutory ? 'Senior Citizen' : override ? 'Manual Discount Override' : '',
           couponCode: useCoupon ? coupon.code : '', method, received: due, change: 0,
           reference: method === 'wallet' ? 'SAMPLE-' + id : '', provider: method === 'wallet' ? (i % 2 ? 'Maya' : 'GCash') : '',
-          verified: method === 'wallet', at: timestamp, prints: 1 };
+          verified: method === 'wallet', at: timestamp, prints: 1, source: 'cloud', receiptQueue: { date, number: i + 1 } };
         sales.push(sale);
+        for (const service of items) {
+          if (index < 27) state.careRecords.push({ saleId: id, serviceId: service.id, status: 'Completed', completedAt: timestamp, by: 'medtech1' });
+          else if (i === 0) {
+            const external = index % 2 === 0;
+            state.careRecords.push({ saleId: id, serviceId: service.id, status: 'Referred', by: 'medtech1' });
+            state.referrals.push({ id: 'REF-DEMO-' + id + '-' + service.id, saleId: id, serviceId: service.id,
+              clientId: client.id, client: client.fullName, service: service.label, reservation: sale.reservation,
+              type: external ? 'Another clinic' : 'Return to BioScan', reason: 'Demo: follow-up assessment requested.',
+              clinic: external ? 'Sample Partner Clinic' : '', returnDate: day(7), at: timestamp, by: 'medtech1' });
+          }
+        }
         if (override) {
           const approval = { id: 'APR-' + id, saleId: sale.draftId, reservation: sale.reservation,
             client: client.fullName, items: items.map(item => item.label), subtotal, amount,

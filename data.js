@@ -296,7 +296,16 @@ const Bioscan = (() => {
       current.bundleDataVersion = 2;
     }
     const migrated = ensureSimulation(current);
-    const seeded = !current.sampleDataVersion;
+    const resetDemo = current.demoResetVersion !== '20261116-demo';
+    if (resetDemo) {
+      for (const field of ['profiles', 'reservations', 'sales', 'approvals', 'audit', 'sms', 'paymentIssues', 'corrections', 'careRecords', 'referrals', 'closures']) current[field] = [];
+      delete current.databaseRecovery;
+      delete current.receiptQueueCounter;
+      current.generation = uid('DATA');
+      current.settings.smsAvailable = true;
+      current.demoResetVersion = '20261116-demo';
+    }
+    const seeded = resetDemo || !current.sampleDataVersion;
     if (seeded) {
       current.customServices ??= [];
       SampleData.seed(current, { day, serviceLines, times, roles });

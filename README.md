@@ -70,6 +70,8 @@ Administrators can **Simulate Connections** and stage a dated verified copy with
 
 ## Browser storage and simulation
 
+The November 16 demo refresh replaces previous operational records once per browser origin, preserving staff accounts, passwords, service/bundle settings, and clinic details. It supplies 90 fictional paid transactions over 30 days, 61 reservations, 104 profiles, and at least 61 simulated SMS entries, plus completed services and sample referrals. Old backups, payment issues, corrections, closures, and queue counters are cleared with the old operational history. Subsequent refreshes preserve new work. These SMS messages are simulated; nothing is sent to real phones.
+
 - `sessionStorage` holds the signed-in role, cashier draft, and last receipt for the current tab. Enter the staff account’s login username and password. Blank credentials no longer sign in. The account’s assigned role opens automatically.
 - Namespaced `localStorage` shares Reservations, Client Profiles, override decisions, and finalized sales across tabs on the same origin. To reset the fictional records, close the BioScan tabs and clear site data for the preview origin. On an origin shared with other projects, delete only the storage keys beginning with `bioscan-prototype:v1:` using browser developer tools.
 - System Administrators can open **Staff Accounts → Create Staff Account**, then enter a full name, unique login username, password, and role. Use **Switch Account** to sign in as that staff member. Accounts are shared across tabs in the same browser profile and origin. They are cleared with site data. Use fictional staff details and a test password.
