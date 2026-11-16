@@ -5,12 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#f8f6ef">
   <title>BioScan Laboratories | Diagnostic Services and Reservations</title>
-  <link rel="stylesheet" href="styles.css">
-  <script src="sample-data.js" defer></script>
-  <script src="data.js" defer></script>
-  <script src="public.js" defer></script>
+  <script src="theme.js?v=20261116-modern"></script>
+  <link rel="stylesheet" href="styles.css?v=20261116-modern">
+  <script src="sample-data.js?v=20261116-modern" defer></script>
+  <script src="data.js?v=20261116-modern" defer></script>
+  <script src="service-info.js?v=20261116-modern" defer></script>
+  <script src="public.js?v=20261116-modern" defer></script>
 </head>
-<body>
+<body class="client-site home-page">
 <a class="skip" href="#main">Skip to content</a>
 <header class="public-header">
   <div class="wrap header-inner">
@@ -29,27 +31,28 @@
       <p>BioScan Laboratories is a diagnostic center in Potrero, Metro Manila. Browse laboratory tests and imaging services, then choose a time for your visit.</p>
       <div class="actions"><a class="button primary" href="reservation.html">Make a Reservation <span class="arrow" aria-hidden="true"></span></a><a class="text-link" href="#services">Browse services</a></div>
     </div>
-    <aside class="visit-panel" aria-labelledby="visit-title">
-      <div class="visit-content">
-        <h2 id="visit-title">Common laboratory tests</h2>
-        <ul id="featured" class="feature-list"></ul>
-        <a class="visit-link" href="#services">View Diagnostic Services <span class="arrow" aria-hidden="true"></span></a>
-      </div>
-      <div class="visit-location"><span class="pin" aria-hidden="true"></span><span data-clinic-address>6 Lanzones Street, Potrero, Metro Manila</span></div>
-    </aside>
+    <figure class="hero-clinic">
+      <img id="hero-clinic-photo" src="assets/bioscan-clinic-exterior.png" alt="BioScan Clinical Laboratory exterior" width="2048" height="1365" fetchpriority="high">
+      <figcaption><strong>Visit BioScan Laboratories</strong><span data-clinic-address>6 Lanzones Street, Potrero, Metro Manila</span><a href="#clinic">Clinic information <span class="arrow" aria-hidden="true"></span></a></figcaption>
+    </figure>
   </section>
+  <section class="quick-tests wrap" aria-labelledby="common-tests-title"><h2 id="common-tests-title">Common laboratory tests</h2><ul id="featured" class="feature-list"></ul><a class="text-link" href="#services">Browse all services <span class="arrow" aria-hidden="true"></span></a></section>
   <section class="directory" id="services" aria-labelledby="services-title">
     <div class="wrap">
       <div class="section-heading">
         <h2 id="services-title">Diagnostic Services</h2>
         <p>Search by test name or browse by category.</p>
       </div>
+      <section class="bundle-preview" aria-labelledby="bundles-title"><div class="bundle-preview-heading"><h3 id="bundles-title">Several tests. One reservation.</h3><p>Explore bundles made from our available services.</p></div><div id="featured-bundles" class="featured-bundles"></div></section>
       <div class="directory-body">
         <div class="search-tools">
           <label>Search services<input id="catalog-search" type="search" placeholder="e.g. CBC, urinalysis, ultrasound"></label>
           <label>Category<select id="catalog-category"></select></label>
         </div>
-        <div class="table-wrap"><table class="catalog-table"><thead><tr><th scope="col">Diagnostic Service</th><th scope="col">Category</th><th scope="col" class="numeric">Price</th></tr></thead><tbody id="catalog-rows"></tbody></table></div>
+        <div id="category-shortcuts" class="category-shortcuts" role="group" aria-label="Browse service categories"></div>
+        <p class="quiet">Hover over a service, or select its name, to see the price, details, and preparation.</p>
+        <div class="table-wrap"><table class="catalog-table"><thead><tr><th scope="col">Diagnostic Service</th><th scope="col">Category</th></tr></thead><tbody id="catalog-rows"></tbody></table></div>
+        <section id="service-detail" class="service-detail" popover="manual" aria-label="Service details"><button type="button" class="button secondary small" id="close-service-detail">Close</button><h2 id="service-detail-title"></h2><div id="service-detail-body"></div></section>
         <div class="list-footer">
           <p id="catalog-count" role="status"></p>
           <nav id="catalog-pagination" class="catalog-pagination" aria-label="Diagnostic Services pages" hidden></nav>
@@ -72,5 +75,6 @@
   <a class="brand footer-brand" href="index.html"><span class="brand-logo" aria-hidden="true"><img src="assets/bioscan-logo.png" alt="" width="382" height="512"></span><span>BioScan<span class="brand-sub">Laboratories</span></span></a>
   <span data-clinic-address>6 Lanzones Street, Potrero, Metro Manila</span><a href="staff.html">Staff Sign In</a>
 </div></footer>
+<div class="mobile-reserve"><a class="button primary" href="reservation.html">Make a Reservation <span class="arrow" aria-hidden="true"></span></a></div>
 </body>
 </html>

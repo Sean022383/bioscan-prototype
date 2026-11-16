@@ -4,25 +4,25 @@ const Management = (() => {
   const B = Bioscan;
   let section = 'approvals';
   let reservationDate = '';
+  let reservationStatus = '';
   let serviceQuery = '';
   let reportPeriod = '30';
   let reportDate = B.day();
   let reportStart = B.day(-29);
   let reportEnd = B.day();
-  let backupTarget = 'local';
 
   const tools = {
-    manager: [['approvals', 'Pending Approvals'], ['reservations', 'Reservations'], ['services', 'Diagnostic Services'],
-      ['profiles', 'Client Profiles'], ['closures', 'Availability & Closures'], ['sms', 'SMS Log'], ['issues', 'Payment & Sync Review'],
+    manager: [['approvals', 'Pending Approvals'], ['care', 'Patient Care & Referrals'], ['reservations', 'Reservations'], ['services', 'Diagnostic Services'], ['bundles', 'Service Bundles'],
+      ['profiles', 'Client Profiles'], ['closures', 'Availability & Closures'], ['sms', 'SMS Log'], ['issues', 'Payment & Backup Review'],
       ['coupons', 'Coupons'], ['reports', 'Financial and Discount Reports'], ['backup', 'Database Operations'],
       ['corrections', 'Transaction Corrections']],
-    admin: [['approvals', 'Pending Approvals'], ['reservations', 'Reservations'], ['services', 'Diagnostic Services'],
-      ['profiles', 'Client Profiles'], ['closures', 'Availability & Closures'], ['sms', 'SMS Log'], ['issues', 'Payment & Sync Review'],
+    admin: [['approvals', 'Pending Approvals'], ['care', 'Patient Care & Referrals'], ['reservations', 'Reservations'], ['services', 'Diagnostic Services'], ['bundles', 'Service Bundles'],
+      ['profiles', 'Client Profiles'], ['closures', 'Availability & Closures'], ['sms', 'SMS Log'], ['issues', 'Payment & Backup Review'],
       ['staff', 'Staff Accounts'], ['roles', 'Roles and Permissions'], ['clinic', 'Clinic Information'], ['settings', 'System Settings'],
       ['audit', 'Audit Log'], ['backup', 'Backup and Recovery'], ['corrections', 'Transaction Corrections']]
   };
 
-  function reset() { section = 'approvals'; reservationDate = ''; serviceQuery = ''; reportPeriod = '30'; backupTarget = 'local'; reportDate = B.day(); reportStart = B.day(-29); reportEnd = B.day(); Office.reset(); }
+  function reset() { section = 'approvals'; reservationDate = ''; reservationStatus = ''; serviceQuery = ''; reportPeriod = '30'; reportDate = B.day(); reportStart = B.day(-29); reportEnd = B.day(); Office.reset(); }
 
   function table(headers, rows, fallback) {
     if (!rows.length) return '<p class="empty">' + B.safe(fallback) + '</p>';
@@ -45,7 +45,7 @@ const Management = (() => {
       '<h2 id="management-heading" tabindex="-1"></h2><p id="management-message" class="message" role="status"></p><div id="management-data"></div></section></div>';
     Staff.app.querySelectorAll('[data-section]').forEach(button => button.addEventListener('click', async () => {
       if (button.dataset.section === 'backup' && role === 'admin') {
-        try { await B.update(state => Recovery.maintain(state)); }
+        try { await B.update(state => { if (state.settings.automaticSync) Recovery.maintain(state); }); }
         catch (error) { announce(error.message, true); return; }
       }
       section = button.dataset.section;
@@ -60,16 +60,13 @@ const Management = (() => {
     const region = Staff.app.querySelector('#management-data');
     title.textContent = tools[role].find(([id]) => id === section)[1];
     const state = B.read();
-    const pages = { approvals, reservations, services, coupons, reports, staff, audit, backup, ...Office.pages };
+    const pages = { approvals, reservations, services, coupons, reports, staff, audit, backup, care: state => Medtech.content(state, true), bundles: CatalogAdmin.page, ...Office.pages };
     region.innerHTML = pages[section](state, role, table, note);
     Office.bind(region, role, draw, announce, table);
+    if (section === 'bundles') CatalogAdmin.bind(region, role, () => draw(role));
+    if (section === 'care') Medtech.bind(region, true, () => draw(role));
     region.querySelectorAll('[data-db-action]').forEach(button => button.addEventListener('click', () => databaseAction(role, button.dataset.dbAction)));
     region.querySelectorAll('[data-restore-backup]').forEach(button => button.addEventListener('click', () => restoreBackup(role, button.dataset.restoreBackup)));
-    region.querySelector('#backup-target')?.addEventListener('change', event => {
-      backupTarget = event.target.value;
-      draw(role);
-      region.querySelector('#backup-target').focus();
-    });
     region.querySelector('[data-create-service]')?.addEventListener('click', () => createService(role));
     region.querySelector('[data-create-coupon]')?.addEventListener('click', () => createCoupon(role));
     region.querySelectorAll('[data-edit-coupon]').forEach(button => button.addEventListener('click', () => createCoupon(role, button.dataset.editCoupon)));
@@ -85,17 +82,22 @@ const Management = (() => {
     region.querySelectorAll('[data-review]').forEach(button => button.addEventListener('click', () => review(role, button.dataset.review)));
     region.querySelectorAll('[data-reschedule]').forEach(button => button.addEventListener('click', () => reschedule(role, button.dataset.reschedule)));
     region.querySelectorAll('[data-cancel]').forEach(button => button.addEventListener('click', () => cancelReservation(role, button.dataset.cancel)));
-    region.querySelectorAll('[data-service]').forEach(button => button.addEventListener('click', () => editService(role, button.dataset.service)));
+    region.querySelectorAll('#service-admin-list [data-service]').forEach(button => button.addEventListener('click', () => editService(role, button.dataset.service)));
     region.querySelector('[data-capacity]')?.addEventListener('click', () => editCapacity(role));
     region.querySelector('#reservation-filter')?.addEventListener('change', event => {
       reservationDate = event.target.value;
       draw(role);
       region.querySelector('#reservation-filter').focus();
     });
+    region.querySelector('#reservation-status')?.addEventListener('change', event => {
+      reservationStatus = event.target.value;
+      draw(role);
+      region.querySelector('#reservation-status').focus();
+    });
     region.querySelector('#management-search')?.addEventListener('input', event => {
       serviceQuery = event.target.value;
       region.querySelector('#service-admin-list').innerHTML = serviceTable(B.read());
-      region.querySelectorAll('[data-service]').forEach(button => button.addEventListener('click', () => editService(role, button.dataset.service)));
+      region.querySelectorAll('#service-admin-list [data-service]').forEach(button => button.addEventListener('click', () => editService(role, button.dataset.service)));
     });
     region.querySelector('#report-period')?.addEventListener('change', event => {
       reportPeriod = event.target.value;
@@ -114,9 +116,9 @@ const Management = (() => {
       else draw(role);
       return;
     }
-    if (['approvals', 'reservations', 'audit', 'reports', 'corrections', 'coupons', 'staff', 'backup', 'profiles', 'closures', 'sms', 'issues', 'settings', 'clinic', 'roles'].includes(section)) {
+    if (['bundles', 'care', 'approvals', 'reservations', 'audit', 'reports', 'corrections', 'coupons', 'staff', 'backup', 'profiles', 'closures', 'sms', 'issues', 'settings', 'clinic', 'roles'].includes(section)) {
       const active = document.activeElement;
-      if (active?.id === 'reservation-filter' || active?.id === 'client-directory-search') return;
+      if (['reservation-filter', 'reservation-status', 'client-directory-search'].includes(active?.id)) return;
       draw(role);
     }
   }
@@ -155,11 +157,11 @@ const Management = (() => {
   }
 
   function reservations(state) {
-    const records = state.reservations.filter(item => !reservationDate || item.date === reservationDate)
-      .slice().sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
-    return note('Review Reservations by day. Authorized staff can reschedule or cancel a Confirmed Reservation.') +
-      '<label class="date-field">Appointment date<input id="reservation-filter" type="date" value="' + B.safe(reservationDate) +
-      '"></label>' + table(['Reservation Code', 'Client', 'Appointment', 'Status', 'Actions'], records.map(item => {
+    const records = B.filterReservations(state, reservationDate, reservationStatus);
+    return note('Filter Reservations by appointment date and status. Authorized staff can reschedule or cancel a Confirmed Reservation.') +
+      '<div class="reservation-filters"><label>Appointment date<input id="reservation-filter" type="date" value="' + B.safe(reservationDate) +
+      '"></label><label>Status<select id="reservation-status"><option value="">All statuses</option>' + ['Cancelled', 'Completed', 'Confirmed', 'No-Show'].map(status => '<option' + (reservationStatus === status ? ' selected' : '') + '>' + status + '</option>').join('') + '</select></label></div>' +
+      '<p class="quiet section-note" role="status">' + records.length + (records.length === 1 ? ' reservation' : ' reservations') + '</p>' + table(['Reservation Code', 'Client', 'Appointment', 'Status', 'Actions'], records.map(item => {
         const status = B.reservationStatus(item);
         const client = state.profiles.find(profile => profile.id === item.clientId);
         return [B.safe(item.code), B.safe(client?.fullName ?? ''), B.appointment(item.date, item.time), B.status(status),
@@ -218,7 +220,7 @@ const Management = (() => {
 
   function services(state, role) {
     return '<div class="tool-heading">' + note('Manage availability and Discount Eligibility for future transactions.') +
-      (role === 'admin' ? '<button class="button primary" data-create-service>Create Diagnostic Service</button>' : '') + '</div>' +
+      '<button class="button primary" data-create-service>Create Diagnostic Service</button>' + '</div>' +
       '<div class="service-admin-tools"><label>Search services<input id="management-search" type="search" value="' + B.safe(serviceQuery) +
       '"></label><button class="button secondary" data-capacity>Slot capacity: ' + state.capacity + '</button></div>' +
       '<div id="service-admin-list">' + serviceTable(state) + '</div>';
@@ -234,25 +236,7 @@ const Management = (() => {
       ]), 'No services match your search.');
   }
 
-  function editService(role, id) {
-    const item = B.services().find(entry => entry.id === id);
-    const priceField = role === 'admin' ? '<label>Price (₱)<input name="price" type="number" min="1" max="100000" step="0.01" value="' +
-      item.price / 100 + '" required></label>' : '<p>Price <strong>' + B.money(item.price) + '</strong></p>';
-    Staff.dialog('Edit ' + item.label, priceField +
-      '<label class="check-row"><input name="available" type="checkbox"' + (item.available ? ' checked' : '') + '><span>Available</span></label>' +
-      '<label class="check-row"><input name="eligible" type="checkbox"' + (item.eligible ? ' checked' : '') + '><span>Discount Eligible</span></label>',
-      async form => {
-        const { available, eligible, price } = Object.fromEntries(new FormData(form));
-        await B.update(state => {
-          const settings = { ...state.serviceSettings[id], available: Boolean(available), eligible: Boolean(eligible) };
-          if (role === 'admin') settings.price = Math.round(Number(price) * 100);
-          state.serviceSettings[id] = settings;
-          B.audit(state, B.roles[role], 'Diagnostic Service updated', item.label);
-        });
-        draw(role);
-        announce(item.label + ' updated.');
-      });
-  }
+  function editService(role, id) { CatalogAdmin.serviceEditor(role, id, () => draw(role)); }
 
   function editCapacity(role) {
     Staff.dialog('Shared slot capacity', '<label>Reservations per Appointment Date and Time Slot<input name="capacity" type="number" min="1" max="30" value="' +
@@ -382,34 +366,7 @@ const Management = (() => {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
-  function createService(role) {
-    if (role !== 'admin') return;
-    const categories = B.categoryOptions().replace('All categories', 'Choose a category');
-    Staff.dialog('Create Diagnostic Service',
-      '<label>Service name<input name="name" maxlength="100" required></label>' +
-      '<div class="form-grid"><label>Category<select name="category" required>' + categories +
-      '</select></label><label>Price (₱)<input name="price" type="number" min="1" max="100000" step="0.01" required></label></div>' +
-      '<label>Alternative search name<input name="alias" maxlength="80"></label>' +
-      '<label class="check-row"><input type="checkbox" name="eligible"><span>Discount Eligible</span></label>' +
-      '<label class="check-row"><input type="checkbox" name="available" checked><span>Available in POS and Reservation</span></label>',
-      async form => {
-        const data = new FormData(form);
-        const label = data.get('name').trim().replace(/\s+/g, ' ');
-        const category = data.get('category');
-        if (!label) throw Error('Enter the Diagnostic Service name.');
-        await B.update(state => {
-          if (B.services(state).some(item => item.label.toLowerCase() === label.toLowerCase() &&
-            item.category === category)) throw Error('This service already exists in that category.');
-          state.customServices.push({ id: B.uid('svc').toLowerCase(), label, category,
-            price: Math.round(Number(data.get('price')) * 100), alias: data.get('alias').trim(),
-            eligible: data.has('eligible'), available: data.has('available') });
-          B.audit(state, B.roles[role], 'Diagnostic Service created', label);
-        });
-        serviceQuery = label;
-        draw(role);
-        announce(label + ' created.');
-      }, { submitLabel: 'Create Service' });
-  }
+  function createService(role) { CatalogAdmin.serviceEditor(role, null, () => draw(role)); }
 
   function createCoupon(role, existingCode) {
     const initial = B.read();
@@ -515,10 +472,10 @@ const Management = (() => {
 
   function staff(state) {
     const rows = state.staffAccounts.map(account => [
-      B.safe(account.fullName), B.safe(account.username), B.roles[account.role], B.status(account.active === false ? 'Inactive' : 'Active'),
+      B.safe(account.fullName), B.safe(account.username), B.roles[account.role] + (account.role === 'medtech' ? '<small>' + B.safe(B.services(state).filter(s => (account.serviceIds || []).includes(s.id)).map(s => s.label).join(', ') || 'No services assigned') + '</small>' : ''), B.status(account.active === false ? 'Inactive' : 'Active'),
       '<button type="button" class="button secondary small" data-office="edit-staff" data-id="' + B.safe(account.username) + '">Edit Account</button>'
     ]);
-    return '<div class="tool-heading">' + note('Create and view accounts for the three staff roles.') +
+    return '<div class="tool-heading">' + note('Manage staff accounts and MedTech service assignments.') +
       '<button class="button primary" data-create-staff>Create Staff Account</button></div>' +
       table(['Full name', 'Login username', 'Role', 'Status', ''], rows, 'No staff accounts yet.');
   }
@@ -530,7 +487,7 @@ const Management = (() => {
       '<label>Login username<input name="username" maxlength="60" autocapitalize="none" spellcheck="false" autocomplete="off" required></label>' +
       '<label>Password<input name="password" type="password" maxlength="128" autocomplete="new-password" required></label>' +
       '<label>Role<select name="role" required><option value="">Choose a staff role</option>' +
-      Staff.roleOptions(Object.keys(B.roles)) + '</select></label>',
+      Staff.roleOptions(Object.keys(B.roles)) + '</select></label>' + Medtech.assignmentFields(),
       async form => {
         const name = await Staff.createStaffAccount(form);
         Staff.close();
@@ -549,72 +506,39 @@ const Management = (() => {
 
   function backup(state, role) {
     const db = Recovery.info(state);
-    const pendingCount = Recovery.pending(state, db).length;
-    const status = online => B.status(online ? 'Online' : 'Offline');
-    const isAdmin = role === 'admin';
-    const switchAction = db.active === 'local' ?
-      '<button class="button secondary" data-db-action="cloud"' + (db.online.local || !db.online.cloud || db.review ? ' disabled' : '') +
-      '>Switch to Cloud Database</button>' :
-      '<button class="button secondary" data-db-action="local"' + (!db.online.local || !db.online.cloud || db.review ? ' disabled' : '') +
-      '>Switch to Local Database</button>';
-    const instruction = db.active === 'local' ? 'Cloud fallback becomes available when Local PostgreSQL is offline and Supabase is online.' :
-      'Bring both databases online and reconcile the fallback transactions to return to local cashiering.';
-    const details = '<dl class="detail-list recovery-details"><div><dt>Last successful sync</dt><dd>' +
-      (db.lastSuccess ? B.stamp(db.lastSuccess) : 'No successful sync yet') + '</dd></div>' +
-      (db.lastAttempt ? '<div><dt>Last sync attempt</dt><dd>' + B.stamp(db.lastAttempt) + '</dd></div>' : '') +
-      '<div><dt>Transactions awaiting sync</dt><dd>' + pendingCount + '</dd></div></dl>';
-    const result = db.result === 'Failed' ? 'Failed' : pendingCount ? 'Pending' : db.result;
-    const restored = db.lastRestored ? '<p class="quiet">Last approved restore · ' + Recovery.targets[db.lastRestored.target] +
-      ' · ' + B.dateLabel(db.lastRestored.date) + '</p>' : '';
-    return note('Database connections, synchronization, and restores are simulated in this prototype.') +
-      '<div class="database-status-grid"><div><h3>Local PostgreSQL</h3>' + status(db.online.local) +
-      '</div><div><h3>Supabase</h3>' + status(db.online.cloud) +
-      '</div><div><h3>Synchronization</h3>' + B.status(result) + '</div></div>' +
-      '<div class="recovery-section"><div class="tool-heading"><h3>POS operating mode</h3>' +
-      '<div class="actions">' + switchAction + '<button class="button secondary" data-db-action="sync">Sync Now</button>' +
-      (isAdmin ? '<button class="button secondary" data-db-action="connections">Simulate Connections</button>' : '') + '</div></div>' +
-      '<p class="recovery-active">Active database · <strong>' + Recovery.targets[db.active] + '</strong>' +
-      (db.active === 'cloud' ? ' · Online POS fallback' : ' · LAN POS') + '</p><p class="quiet">' + instruction + '</p>' +
-      details + '</div>' + reviewPanel(state, db) + (isAdmin ? backupHistory(db, restored) : '');
+    const pending = Recovery.pending(state, db).length;
+    const online = value => B.status(value ? 'Online' : 'Offline');
+    return note('Cloud connections, backup copies, and restores are simulated in this prototype.') +
+      '<div class="database-status-grid"><div><h3>Primary Cloud (Supabase)</h3>' + online(db.online.cloud) + '</div>' +
+      '<div><h3>Cloud Backup</h3>' + online(db.online.backup) + '</div><div><h3>Backup protection</h3>' + B.status(db.result === 'Failed' ? 'Failed' : pending ? 'Pending' : db.lastSuccess ? 'Successful' : 'Not run') + '</div></div>' +
+      '<section class="recovery-section"><div class="tool-heading"><h3>Cloud operations</h3><div class="actions"><button class="button secondary" data-db-action="backup"' + (!db.online.cloud || !db.online.backup || db.review ? ' disabled' : '') + '>Back Up Now</button>' +
+      (role === 'admin' ? '<button class="button secondary" data-db-action="connections">Simulate Connections</button>' : '') + '</div></div>' +
+      '<p>Transactions and reservations use the primary cloud database. The separate cloud backup stores recovery copies.</p>' +
+      '<p class="quiet">A primary-cloud outage pauses processing. A backup-cloud outage leaves primary processing available, with backups pending.</p>' +
+      '<dl class="detail-list"><div><dt>Last successful backup</dt><dd>' + (db.lastSuccess ? B.stamp(db.lastSuccess) : 'No successful backup yet') + '</dd></div>' +
+      '<div><dt>Transactions awaiting backup</dt><dd>' + pending + '</dd></div></dl></section>' + reviewPanel(state, db) + backupHistory(db, role);
   }
 
   function reviewPanel(state, db) {
     const review = db.review;
     if (!review) return '';
-    const isReturn = review.kind === 'return';
-    const pendingCount = Recovery.pending(state, db).length;
-    const restored = isReturn ? null : new Set(review.restored.map(sale => sale.id));
-    const detail = isReturn ? pendingCount + ' transaction(s) to reconcile before switching to Local PostgreSQL.' :
-      review.restored.length + ' transaction(s) in the selected backup. ' +
-      state.sales.filter(sale => !restored.has(sale.id)).length + ' other transaction(s) will be preserved.';
-    const currentIds = new Set(state.sales.map(sale => sale.id));
-    const items = isReturn ? Recovery.pending(state, db).map(sale => [sale, 'Synchronize']) : [
-      ...review.restored.filter(sale => !currentIds.has(sale.id)).map(sale => [sale, 'Recover from backup']),
-      ...state.sales.filter(sale => !restored.has(sale.id)).map(sale => [sale, 'Preserve current record'])
-    ];
-    const comparison = '<details><summary>View transactions to reconcile</summary>' +
-      table(['Transaction Number', 'Amount paid', 'Action'], items.map(([sale, action]) =>
-        [B.safe(sale.id), B.money(sale.due), action]), 'No differences to reconcile.') + '</details>';
-    return '<section class="recovery-section recovery-review" aria-label="Reconciliation">' +
-      '<div class="tool-heading"><h3>Reconciliation required</h3>' + B.status('Pending') + '</div><p>' +
-      (isReturn ? 'Return to Local PostgreSQL' : Recovery.targets[review.target] + ' · ' + B.dateLabel(review.date)) +
-      '</p><p class="quiet">' + detail + '</p>' + comparison + '<button class="button primary" data-db-action="approve">Review and Approve</button></section>';
+    const restored = new Set(review.restored.map(s => s.id));
+    const current = new Set(state.sales.map(s => s.id));
+    const differences = [...review.restored.filter(s => !current.has(s.id)).map(s => [s, 'Recover from cloud backup']),
+      ...state.sales.filter(s => !restored.has(s.id)).map(s => [s, 'Preserve current record'])];
+    return '<section class="recovery-section recovery-review" aria-label="Reconciliation"><div class="tool-heading"><h3>Cloud restore review</h3>' + B.status('Pending') + '</div>' +
+      '<p>Backup date: ' + B.dateLabel(review.date) + '. Review recovered and current records before resuming primary-cloud processing.</p>' +
+      '<details><summary>View transactions to reconcile</summary>' + table(['Transaction Number', 'Amount paid', 'Action'], differences.map(([sale, action]) => [B.safe(sale.id), B.money(sale.due), action]), 'No differences to reconcile.') + '</details>' +
+      '<button class="button primary" data-db-action="approve"' + (!db.online.cloud ? ' disabled' : '') + '>Approve Reconciliation</button></section>';
   }
 
-  function backupHistory(db, restored) {
-    const rows = db.backups[backupTarget].map(copy => [
-      B.dateLabel(copy.date), B.stamp(copy.capturedAt), copy.ids.length, B.status('Verified'),
-      '<button class="button secondary small" data-restore-backup="' + copy.date + '" aria-label="Restore backup from ' +
-      B.safe(B.dateLabel(copy.date)) + '"' + (db.review || !db.online[backupTarget] ? ' disabled' : '') + '>Restore</button>'
-    ]);
-    return '<section class="recovery-section"><div class="tool-heading"><div><h3>Daily backups</h3>' +
-      '<p class="quiet">Rolling seven-day retention</p></div><label>Backup database<select id="backup-target">' +
-      Object.entries(Recovery.targets).map(([key, label]) =>
-        '<option value="' + key + '"' + (key === backupTarget ? ' selected' : '') + '>' + label + '</option>').join('') +
-      '</select></label></div>' +
-      (backupTarget === 'cloud' ? note('Provider-managed backup history. Cloud restoration requires authorized Supabase project access.') :
-        note('Daily local backup copies are kept on a separate encrypted drive in the thesis deployment.')) +
-      table(['Backup date', 'Captured', 'Transactions', 'Status', ''], rows, 'No verified backup is available.') + restored + '</section>';
+  function backupHistory(db, role) {
+    const restored = db.lastRestored ? '<p class="quiet">Last approved restore · ' + B.dateLabel(db.lastRestored.date) + '</p>' : '';
+    const rows = db.backups.backup.map(copy => [B.dateLabel(copy.date), B.stamp(copy.capturedAt), copy.ids.length,
+      B.status(copy.ids.every(id => db.archive[id]) ? 'Verified' : 'Unavailable'), role === 'admin' ? '<button class="button secondary small" data-restore-backup="' + copy.date + '"' +
+        (db.review || !db.online.cloud || !db.online.backup || copy.ids.some(id => !db.archive[id]) ? ' disabled' : '') + '>Restore to Primary Cloud</button>' : 'Administrator restore only']);
+    return '<section class="recovery-section"><h3>Cloud backup history</h3><p class="quiet">Daily recovery copies with rolling seven-day retention. Restore access is limited to the Administrator.</p>' +
+      table(['Backup date', 'Captured', 'Transactions', 'Status', ''], rows, 'No verified cloud backup yet. Use Back Up Now to create one.') + restored + '</section>';
   }
 
   async function runRecovery(role, action) {
@@ -631,49 +555,24 @@ const Management = (() => {
   }
 
   function databaseAction(role, action) {
-    const state = B.read();
-    const db = Recovery.info(state);
-    if (action === 'sync') {
-      runRecovery(role, current => Recovery.synchronize(current, role) ? 'Database synchronization successful.' :
-        'Synchronization failed. Check connections, the operating mode, and any pending reconciliation.')
-        .catch(error => announce(error.message, true));
-    }
+    const db = Recovery.info(B.read());
+    if (action === 'backup') runRecovery(role, state => Recovery.synchronize(state, role) ? 'Cloud backup completed.' :
+      'Backup failed. Check cloud connections and pending recovery issues.').catch(error => announce(error.message, true));
     if (action === 'connections') {
-      Staff.dialog('Simulate Database Connections', '<p class="quiet">Use these settings to test outages and recovery.</p>' +
-        '<label>Local PostgreSQL<select name="local">' + connectionOptions(db.online.local) + '</select></label>' +
-        '<label>Supabase<select name="cloud">' + connectionOptions(db.online.cloud) + '</select></label>', async form => {
-        await runRecovery(role, current => {
-          Recovery.setConnections(current, role, {
-            local: form.elements.local.value === 'online', cloud: form.elements.cloud.value === 'online'
-          });
-          return 'Database connection status updated.';
+      Staff.dialog('Simulate Cloud Connections', '<label>Primary Cloud (Supabase)<select name="cloud">' + connectionOptions(db.online.cloud) + '</select></label>' +
+        '<label>Cloud Backup<select name="backup">' + connectionOptions(db.online.backup) + '</select></label>', async form => {
+        await runRecovery(role, state => {
+          Recovery.setConnections(state, role, { cloud: form.elements.cloud.value === 'online', backup: form.elements.backup.value === 'online' });
+          return 'Cloud connection status updated.';
         });
       }, { submitLabel: 'Save Status' });
     }
-    if (action === 'cloud') {
-      confirmRecovery(role, 'Switch to Cloud Database', 'The POS will use Supabase for online fallback.',
-        'I verified that local transaction processing has stopped across all cashiering workstations.', current => {
-          Recovery.switchToCloud(current, role);
-          return 'Supabase online fallback is active.';
-        }, 'Activate Cloud Fallback');
-    }
-    if (action === 'local') {
-      confirmRecovery(role, 'Switch to Local Database', 'Returning to LAN cashiering requires reconciliation of fallback transactions.',
-        'I verified that fallback cashiering has stopped.', current => {
-          Recovery.startReturn(current, role);
-          return 'Local switch is waiting for reconciliation approval.';
-        }, 'Start Reconciliation');
-    }
-    if (action === 'approve') {
-      confirmRecovery(role, 'Approve Reconciliation', db.review?.kind === 'return' ?
-        'Review ' + Recovery.pending(state, db).length + ' pending transaction(s). Approval resumes local cashiering.' :
-        'Review the restored transactions and the current transaction records before resuming cashiering.',
-        'I reviewed the reconciliation and approve resuming cashiering.', current => {
-          const kind = Recovery.approve(current, role, db.review?.id);
-          return kind === 'return' ? 'Reconciliation approved. Local PostgreSQL is active.' :
-            'Restore approved. Cashiering can resume for the restored database.';
-        }, 'Approve Reconciliation');
-    }
+    if (action === 'approve') confirmRecovery(role, 'Approve Cloud Restore',
+      'Review the restored transactions and current records before resuming primary-cloud processing.',
+      'I reviewed the records and approve resuming processing.', state => {
+        Recovery.approve(state, role, db.review?.id);
+        return 'Reconciliation approved. Primary-cloud processing can resume.';
+      }, 'Approve Reconciliation');
   }
 
   function connectionOptions(online) {
@@ -682,13 +581,11 @@ const Management = (() => {
   }
 
   function restoreBackup(role, date) {
-    const target = backupTarget;
-    confirmRecovery(role, 'Restore Backup', Recovery.targets[target] + ' · ' + B.dateLabel(date) +
-      '. The restored copy will be held for reconciliation before cashiering resumes.',
-    target === 'cloud' ? 'I have authorized Supabase project access and want to restore this backup.' :
-      'I want to restore this Local PostgreSQL backup for reconciliation.', state => {
-        Recovery.restore(state, role, target, date);
-        return 'Backup restored for reconciliation.';
+    confirmRecovery(role, 'Restore Cloud Backup', 'Cloud Backup · ' + B.dateLabel(date) +
+      '. The recovered records will be reviewed before primary-cloud processing resumes.',
+      'I am authorized to restore this cloud backup.', state => {
+        Recovery.restore(state, role, 'backup', date);
+        return 'Cloud backup staged for reconciliation.';
       }, 'Restore Backup');
   }
 

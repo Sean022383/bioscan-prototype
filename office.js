@@ -43,19 +43,19 @@ const Office = (() => {
   }
 
   function issues(state, role, table, note) {
-    return '<div class="tool-heading">' + note('Review failed payment checks, duplicate references, and synchronization conflicts.') +
-      action('sync-conflict', 'Simulate Sync Conflict') + '</div>' +
+    return '<div class="tool-heading">' + note('Review failed payment checks, duplicate references, and backup conflicts.') +
+      action('sync-conflict', 'Simulate Backup Conflict') + '</div>' +
       table(['Issue', 'Reference / Transaction', 'Reason', 'Status', ''], state.paymentIssues.map(item => [
-        B.safe(item.type) + '<small>' + B.stamp(item.at) + '</small>', B.safe(item.reference || item.transaction || '—'),
+        B.safe(item.type === 'Synchronization conflict' ? 'Backup conflict' : item.type) + '<small>' + B.stamp(item.at) + '</small>', B.safe(item.reference || item.transaction || '—'),
         B.safe(item.reason) + (item.resolution ? '<small>' + B.safe(item.resolution) + '</small>' : ''),
         B.status(item.status), item.status === 'Pending' ? action('resolve-issue', 'Review', item.id) : ''
-      ]), 'No flagged payments or synchronization conflicts.');
+      ]), 'No flagged payments or backup conflicts.');
   }
 
   function sms(state, role, table, note) {
     return note('This log contains simulated SMS dispatch results. Recipient numbers are masked.') +
       table(['Sent at', 'Type', 'Recipient', 'Reservation Code', 'Message', 'Result'], state.sms.map(item => [
-        B.stamp(item.at), B.safe(item.type), '•••• ' + B.safe(item.mobile.slice(-4)), B.safe(item.reservation || '—'),
+        B.stamp(item.at), B.safe(item.type === 'Synchronization conflict' ? 'Backup conflict' : item.type), '•••• ' + B.safe(item.mobile.slice(-4)), B.safe(item.reservation || '—'),
         item.type === 'OTP' ? 'Verification code' : B.safe(item.message), B.status(item.status)
       ]), 'No simulated SMS dispatches yet.');
   }
@@ -76,7 +76,7 @@ const Office = (() => {
     return '<div class="tool-heading">' + note('Change appointment capacity and the simulation behavior.') +
       action('edit-settings', 'Edit System Settings') + '</div><dl class="detail-list">' +
       '<div><dt>Shared slot capacity</dt><dd>' + state.capacity + '</dd></div><div><dt>Simulated SMS delivery</dt><dd>' +
-      (state.settings.smsAvailable ? 'Available' : 'Unavailable') + '</dd></div><div><dt>Automatic simulated sync</dt><dd>' +
+      (state.settings.smsAvailable ? 'Available' : 'Unavailable') + '</dd></div><div><dt>Automatic cloud backup</dt><dd>' +
       (state.settings.automaticSync ? 'Enabled' : 'Paused') + '</dd></div></dl>';
   }
 
@@ -207,17 +207,17 @@ const Office = (() => {
           Object.assign(item, { status: 'Resolved', resolution, resolvedAt: new Date().toISOString(), resolvedBy: actor });
           B.audit(current, actor, 'Flagged issue resolved', id);
         }), 'Mark Resolved');
-      if (office === 'sync-conflict') change('Simulate Synchronization Conflict',
+      if (office === 'sync-conflict') change('Simulate Backup Conflict',
         '<label>Transaction<select name="saleId" required>' + state.sales.slice().reverse().map(sale =>
           '<option>' + B.safe(sale.id) + '</option>').join('') + '</select></label>' +
-        '<p class="quiet">The next simulated sync will require this issue to be reviewed.</p>',
+        '<p class="quiet">The next cloud backup will require this issue to be reviewed.</p>',
         data => B.update(current => {
           const id = data.get('saleId');
           if (!current.sales.some(sale => sale.id === id)) throw Error('Choose a finalized transaction.');
-          if (current.paymentIssues.some(item => item.type === 'Synchronization conflict' && item.saleId === id && item.status === 'Pending'))
+          if (current.paymentIssues.some(item => ['Backup conflict', 'Synchronization conflict'].includes(item.type) && item.saleId === id && item.status === 'Pending'))
             throw Error('This transaction already has a pending conflict.');
-          B.paymentIssue(current, { type: 'Synchronization conflict', reason: 'Local and Supabase copies differ.', transaction: id, saleId: id });
-          B.audit(current, actor, 'Synchronization conflict flagged', id);
+          B.paymentIssue(current, { type: 'Backup conflict', reason: 'Primary-cloud and backup-cloud records differ.', transaction: id, saleId: id });
+          B.audit(current, actor, 'Backup conflict flagged', id);
         }), 'Create Conflict');
       if (office === 'correct-sale') {
         const sale = state.sales.find(item => item.id === id);
@@ -284,11 +284,11 @@ const Office = (() => {
       if (office === 'edit-settings') change('Edit System Settings',
         '<label>Shared slot capacity<input name="capacity" type="number" min="1" max="30" value="' + state.capacity + '" required></label>' +
         check('sms', 'Simulated SMS delivery available', state.settings.smsAvailable) +
-        check('sync', 'Automatically simulate synchronization while the staff page is open', state.settings.automaticSync),
+        check('sync', 'Automatically create cloud backups while the staff page is open', state.settings.automaticSync),
         data => B.update(db => {
           db.capacity = Number(data.get('capacity'));
           db.settings = { smsAvailable: data.has('sms'), automaticSync: data.has('sync') };
-          B.audit(db, actor, 'System settings updated', 'Capacity, SMS, and synchronization');
+          B.audit(db, actor, 'System settings updated', 'Capacity, SMS, and cloud backup');
         }), 'Save Settings');
       if (office === 'edit-staff') {
         const account = state.staffAccounts.find(item => item.username === id);
@@ -296,7 +296,7 @@ const Office = (() => {
         change('Edit Staff Account', field('fullName', 'Full name', account.fullName) +
           '<label>Role<select name="role" required>' + Object.entries(B.roles).map(([key, label]) =>
             '<option value="' + key + '"' + (key === account.role ? ' selected' : '') + '>' + label + '</option>').join('') +
-          '</select></label>' + field('password', 'New password (optional)', '', 'password', false) +
+          '</select></label>' + Medtech.assignmentFields(account.serviceIds || []) + field('password', 'New password (optional)', '', 'password', false) +
           check('active', 'Account active', account.active !== false), (_, form) => Staff.updateStaffAccount(form, id), 'Save Account');
       }
     };

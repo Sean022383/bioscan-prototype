@@ -21,7 +21,7 @@
   function renderSummary() {
     const lines = confirmation?.items ?? B.serviceLines([...chosen]);
     summary.innerHTML = '<h2>Reservation summary</h2>' + (lines.length
-      ? '<ul class="summary-list">' + lines.map(item => '<li><span>' + B.safe(item.label) + '</span><strong>' +
+      ? '<ul class="summary-list">' + lines.map(item => '<li><span>' + B.safe(item.label) + (item.bundleLabel ? '<small>Part of ' + B.safe(item.bundleLabel) + '</small>' : '') + '</span><strong>' +
         B.compactMoney(item.price) + '</strong></li>').join('') + '</ul><div class="summary-total"><span>Estimated total</span><strong>' +
         B.money(lines.reduce((total, line) => total + line.price, 0)) + '</strong></div>'
       : '<p class="quiet">Selected services and estimated prices will appear here.</p>') +
@@ -43,6 +43,8 @@
   }
 
   async function issueOtp() {
+    const hold = Recovery.checkoutBlock(B.read());
+    if (hold) throw Error(hold);
     otp = String(crypto.getRandomValues(new Uint32Array(1))[0] % 1000000).padStart(6, '0');
     otpExpires = Date.now() + 300000;
     otpStatus = await B.update(state => B.notify(state, 'OTP', details.mobile, 'BioScan verification code: ' + otp));
@@ -54,7 +56,11 @@
         B.safe(otp) + '</strong> · valid for 5 minutes</p></details>' :
         '<p class="notice">SMS delivery failed. Request a new code to continue.</p>') +
       '<label class="date-field">Verification code<input name="otp" required inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6"></label>' +
-      '<button type="button" class="link-button" id="resend">Get a new verification code</button>';
+      '<button type="button" class="link-button" id="resend">Get a new verification code</button>' +
+      ServiceInfo.selected([...chosen]) +
+      '<section class="reservation-consent"><h3>Before you confirm</h3><p>BioScan will use the details you submit to arrange your reservation, contact you, and prepare your selected services. Authorized clinic staff, including MedTechs assigned to your services, may view them. Health information is optional. This prototype stores fictional data in this browser; use sample details only.</p>' +
+      '<label class="check-row"><input type="checkbox" name="dataConsent" required><span>I agree to the collection and use of the information I submit for my reservation and selected services.</span></label>' +
+      '<label class="check-row"><input type="checkbox" name="prepConsent" required><span>I have read the preparation instructions for all selected services and will contact BioScan about any instructions I need clarified.</span></label></section>';
   }
 
   function confirmationStep() {
@@ -79,7 +85,7 @@
       if (index === step) item.setAttribute('aria-current', 'step');
       else item.removeAttribute('aria-current');
     });
-    const content = [serviceStep, () => '<div class="form-grid">' + B.clientFields() + '</div>', slotStep, verificationStep, confirmationStep][step]();
+    const content = [serviceStep, () => '<div class="form-grid">' + B.clientFields(true) + '</div>' + ServiceInfo.selected([...chosen]), slotStep, verificationStep, confirmationStep][step]();
     const heading = '<h2 id="step-title" tabindex="-1">' + stepTitles[step] + '</h2>';
     work.innerHTML = heading + (step === 4 ? content : '<form id="reservation-form">' + content +
       '<p class="message" id="step-message" role="status"></p><div class="step-actions">' +
@@ -100,7 +106,7 @@
     const query = work.querySelector('#pick-search');
     const category = work.querySelector('#pick-category');
     const list = work.querySelector('#pick-list');
-    const options = B.search(B.services().filter(item => item.available), query.value, category.value);
+    const options = B.search(B.offerings().filter(item => item.available), query.value, category.value);
     list.innerHTML = options.map(item => '<label class="pick-row"><input type="checkbox" value="' + item.id +
       '"' + (chosen.has(item.id) ? ' checked' : '') + '><span><strong>' + B.safe(item.label) +
       '</strong><small>' + B.safe(item.category) + '</small></span><span class="numeric">' +
@@ -135,15 +141,19 @@
       work.querySelector('#pick-category').addEventListener('change', drawOptions);
       work.querySelector('#pick-list').addEventListener('change', event => {
         const item = event.target;
-        if (item.checked) chosen.add(item.value); else chosen.delete(item.value);
+        if (item.checked) {
+          try { B.serviceLines([...chosen, item.value]); chosen.add(item.value); }
+          catch (error) { item.checked = false; B.message(msg, error.message, true); return; }
+        } else chosen.delete(item.value);
         work.querySelector('#pick-count').textContent = chosen.size + ' selected';
         B.message(msg, '');
         renderSummary();
       });
     }
     if (step === 1 && details) {
-      for (const [name, value] of Object.entries(details)) form.elements[name].value = value;
+      for (const [name, value] of Object.entries({ ...details, ...details.health })) if (form.elements[name]) form.elements[name].value = value;
     }
+    if (step === 1) B.bindHealth(form);
     if (step === 2) {
       drawSlots();
       form.addEventListener('change', event => {
@@ -175,20 +185,25 @@
           try { await issueOtp(); } finally { submitting = false; }
         }
         if (step === 3) {
+          if (!form.elements.dataConsent.checked || !form.elements.prepConsent.checked)
+            throw Error('Confirm your data consent and preparation acknowledgment before reserving.');
           if (Date.now() > otpExpires) throw Error('This code has expired. Get a new verification code.');
           if (otpStatus !== 'Delivered' || form.elements.otp.value !== otp) throw Error('Enter the six-digit code from the simulated SMS.');
           submitting = true;
           try {
             confirmation = await B.update(state => {
+              const hold = Recovery.checkoutBlock(state);
+              if (hold) throw Error(hold);
               if (!B.validSlot(state, date, time, undefined, [...chosen])) throw Error('That time slot is full or has passed. Go back and choose another.');
-              const available = B.services(state).filter(item => item.available);
+              const available = B.offerings(state).filter(item => item.available);
               if ([...chosen].some(id => !available.some(item => item.id === id)))
                 throw Error('A selected service became unavailable. Go back to update your selections.');
               const profile = B.findOrCreateClient(state, details);
               if (state.reservations.some(item => item.clientId === profile.id && item.date === date && item.time === time &&
                 ['Confirmed', 'Completed'].includes(item.status))) throw Error('This Client already has a Reservation for that appointment slot.');
               const record = { code: B.uid('BS'), clientId: profile.id, date, time, status: 'Confirmed',
-                items: B.serviceLines([...chosen], state) };
+                items: B.serviceLines([...chosen], state), health: structuredClone(details.health),
+                consent: { data: true, preparation: true, at: new Date().toISOString(), version: '2026-11-16', serviceIds: B.expandIds([...chosen], state), offeringIds: [...chosen] } };
               record.smsStatus = B.notify(state, 'Reservation confirmation', profile.mobile,
                 'Your Reservation ' + record.code + ' is confirmed for ' + B.appointment(date, time) + '.', record.code);
               state.reservations.push(record);
@@ -226,7 +241,7 @@
     updateFooter();
     if (step === 4) { render(false); return; }
     if (step === 0) {
-      const available = new Set(B.services().filter(item => item.available).map(item => item.id));
+      const available = new Set(B.offerings().filter(item => item.available).map(item => item.id));
       for (const id of chosen) if (!available.has(id)) chosen.delete(id);
       drawOptions();
     }

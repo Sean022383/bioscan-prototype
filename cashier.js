@@ -48,7 +48,7 @@ const Cashier = (() => {
       const coupon = state.coupons.find(item => item.code === code);
       const uses = state.sales.filter(sale => sale.couponCode === code);
       const base = coupon ? sum(draft.items.filter(item => !coupon.serviceIds || coupon.serviceIds.includes(item.id))) : 0;
-      if (Recovery.info(state).active === 'cloud' || !coupon?.active || B.day() < coupon.start || B.day() > coupon.end || !base ||
+      if (!coupon?.active || B.day() < coupon.start || B.day() > coupon.end || !base ||
           uses.length >= coupon.limit || uses.filter(sale => sale.clientId === draft.clientId).length >= coupon.perClient) {
         return { subtotal, eligible, amount: 0, due: subtotal, label: '', invalidCoupon: true };
       }
@@ -95,8 +95,7 @@ const Cashier = (() => {
     const db = Recovery.info(state);
     const blocked = Recovery.checkoutBlock(state);
     const banner = Staff.app.querySelector('#cashier-database-status');
-    const status = blocked || (db.active === 'cloud' ? 'Supabase online fallback is active. Usage-limited Coupons are unavailable.' :
-      db.online.cloud ? '' : 'Supabase is offline. Walk-in cashiering is available.');
+    const status = blocked || (!db.online.backup ? 'Cloud backup is offline. Primary-cloud processing is available; backup copies are pending.' : '');
     banner.textContent = status;
     banner.hidden = !status;
     Staff.app.querySelector('[data-action="find"]').disabled = Boolean(Recovery.checkoutBlock(state, true));
@@ -115,12 +114,12 @@ const Cashier = (() => {
 
   function drawCatalog(state) {
     const disabled = locked(state) || blocked(state);
-    const items = B.search(B.services(state).filter(item => item.available), query, category);
+    const items = B.search(B.offerings(state).filter(item => item.available), query, category);
     const catalog = Staff.app.querySelector('#pos-catalog');
     const top = catalog.scrollTop;
     catalog.innerHTML = '<div class="pos-row pos-table-head"><span>Service</span><span class="numeric">Price</span><span></span></div>' +
       (items.map(item => {
-        const inSale = draft?.items.some(line => line.id === item.id);
+        const inSale = draft?.items.some(line => B.expandIds([item.id], state).includes(line.id));
         return '<div class="pos-row"><span><strong>' + B.safe(item.label) + '</strong><small>' +
           B.safe(item.category) + '</small></span><span class="numeric">' + B.money(item.price) + '</span>' +
           '<button type="button" class="button secondary small" data-action="add" data-id="' + item.id +
@@ -169,10 +168,10 @@ const Cashier = (() => {
       (linked ? '<span>' + B.appointment(linked.date, linked.time) + ' · ' + B.safe(B.reservationStatus(linked)) + '</span>' : '') + '</div>' +
       (unavailable ? '<p class="notice">This Reservation is unavailable for payment. Start another transaction.</p>' : '') +
       (checkoutHold && !Recovery.checkoutBlock(state) ? '<p class="notice">' + B.safe(checkoutHold) + '</p>' : '') +
-      '<div class="sale-lines">' + (draft.items.map(item => '<div class="sale-line"><span>' + B.safe(item.label) +
+      '<div class="sale-lines">' + (draft.items.map(item => '<div class="sale-line"><span>' + B.safe(item.label) + (item.bundleLabel ? '<small>Part of ' + B.safe(item.bundleLabel) + '</small>' : '') +
         '</span><strong class="numeric">' + B.money(item.price) + '</strong>' +
         (locked(state) || unavailable ? '' : '<button class="link-button remove-item" data-action="remove" data-id="' + item.id +
-          '" aria-label="Remove ' + B.safe(item.label) + '">Remove</button>') + '</div>').join('') ||
+          '" aria-label="Remove ' + B.safe(item.bundleLabel || item.label) + '">' + (item.bundleId ? 'Remove bundle' : 'Remove') + '</button>') + '</div>').join('') ||
         '<p class="quiet">Select a Diagnostic Service to add it to this sale.</p>') + '</div>' +
       discountControl(decision, unavailable) +
       '<div class="sale-bottom"><dl class="totals"><div><dt>Subtotal</dt><dd>' + B.money(total.subtotal) +
@@ -214,13 +213,14 @@ const Cashier = (() => {
   }
 
   function walkIn(serviceId) {
-    startDialog('Add Client · New Walk-In', '<div class="form-grid">' + B.clientFields() + '</div>', async form => {
+    startDialog('Add Client · New Walk-In', '<div class="form-grid">' + B.clientFields(true) + '</div>' +
+      '<label class="check-row"><input type="checkbox" name="walkInConsent" required><span>I confirmed the client’s agreement to use their supplied information for registration and selected services.</span></label>', async form => {
       const details = B.clientDetails(form);
       draft = await B.update(state => {
         const profile = B.findOrCreateClient(state, details);
         B.audit(state, B.roles.cashier, 'Walk-in registered', profile.id);
         const transaction = newDraft(state, profile);
-        if (serviceId && B.services(state).some(item => item.id === serviceId && item.available)) {
+        if (serviceId && B.offerings(state).some(item => item.id === serviceId && item.available)) {
           transaction.items = B.serviceLines([serviceId], state);
         }
         return transaction;
@@ -285,10 +285,17 @@ const Cashier = (() => {
     if (!draft) { walkIn(id); return; }
     const state = B.read();
     if (locked(state) || blocked(state)) return;
-    if (remove) draft.items = draft.items.filter(item => item.id !== id);
+    if (remove) {
+      const target = draft.items.find(item => item.id === id);
+      draft.items = draft.items.filter(item => target?.bundleId ? item.bundleId !== target.bundleId : item.id !== id);
+    }
     else {
-      const item = B.services(state).find(entry => entry.id === id && entry.available);
-      if (item && !draft.items.some(entry => entry.id === id)) draft.items.push(B.serviceLines([id], state)[0]);
+      const item = B.offerings(state).find(entry => entry.id === id && entry.available);
+      if (item) {
+        const lines = B.serviceLines([id], state);
+        if (lines.some(line => draft.items.some(entry => entry.id === line.id))) { say('A service in this bundle is already in the sale. Remove the overlapping selection first.', true); return; }
+        draft.items.push(...lines);
+      }
     }
     if (!draft.items.length || (!draft.items.some(item => item.eligible) && ['senior', 'pwd'].includes(draft.discount?.kind))) draft.discount = null;
     save();
@@ -374,10 +381,9 @@ const Cashier = (() => {
 
   function authorizeAtStation(request) {
     Staff.dialog('Authorize Manual Discount Override', '<p>Approve ' + B.money(request.amount) + ' for <strong>' +
-      B.safe(request.client) + '</strong>.</p><label>Approver role<select name="approver">' +
-      Staff.roleOptions(['manager', 'admin']) + '</select></label><label>Decision<select name="decision"><option>Approved</option><option>Declined</option></select></label>' + Staff.credentialFields() +
-      '<p class="quiet">Leave both fields blank to use the selected approver role, or enter the approver’s credentials.</p>', async form => {
-      const identity = await Staff.authenticate(form, form.elements.approver.value);
+      B.safe(request.client) + '</strong>.</p><label>Decision<select name="decision"><option>Approved</option><option>Declined</option></select></label>' + Staff.credentialFields() +
+      '<p class="quiet">Enter a Clinic Manager or System Administrator account to record the decision.</p>', async form => {
+      const identity = await Staff.authenticate(form);
       const by = identity.role;
       if (!['manager', 'admin'].includes(by)) throw Error('Use a Clinic Manager or System Administrator account to approve this request.');
       const decision = form.elements.decision.value;
@@ -497,7 +503,7 @@ const Cashier = (() => {
       (sale.prints ? '<p class="reprint">REPRINT</p>' : '') + '</header><dl>' +
       line('Transaction Number', sale.id) + line('Date and time', B.stamp(sale.at)) + line('Client', sale.client) +
       (sale.reservation ? line('Reservation Code', sale.reservation) : '') +
-      '</dl><ul>' + sale.items.map(item => '<li><span>' + B.safe(item.label) + '</span><strong>' +
+      '</dl><ul>' + sale.items.map(item => '<li><span>' + B.safe(item.label) + (item.bundleLabel ? '<small>Part of ' + B.safe(item.bundleLabel) + '</small>' : '') + '</span><strong>' +
         B.money(item.price) + '</strong></li>').join('') + '</ul><dl>' +
       line('Subtotal', B.money(sale.subtotal)) + line(sale.label || 'Discount', B.money(sale.amount)) +
       line('Total paid', B.money(sale.due)) +

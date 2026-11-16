@@ -4,6 +4,9 @@
   const B = Bioscan;
   function renderClinic() {
     const clinic = B.read().clinic;
+    const heroPhoto = document.querySelector('#hero-clinic-photo');
+    const photo = clinic.photos[0];
+    if (heroPhoto && photo) { heroPhoto.src = photo.src; heroPhoto.alt = photo.caption || 'BioScan clinic exterior'; }
     const gallery = document.querySelector('#clinic-photos');
     const digits = clinic.phone.replace(/[^\d+]/g, "");
     const landline = digits.startsWith("0") ? "+63" + digits.slice(1) : digits;
@@ -27,8 +30,73 @@
   const pagination = document.querySelector('#catalog-pagination');
   const pageSize = 8;
   let page = 1;
+  const detail = document.querySelector('#service-detail');
+  let activeService;
+  let dismissTimer;
+  function closeDetail() {
+    clearTimeout(dismissTimer);
+    activeService?.setAttribute('aria-expanded', 'false');
+    detail.hidePopover();
+    activeService = null;
+  }
+  function showDetail(button) {
+    clearTimeout(dismissTimer);
+    const service = B.offerings().find(item => item.id === button.dataset.serviceInfo);
+    if (!service) return;
+    activeService?.setAttribute('aria-expanded', 'false');
+    activeService = button;
+    button.setAttribute('aria-expanded', 'true');
+    document.querySelector('#service-detail-title').textContent = service.label;
+    document.querySelector('#service-detail-body').innerHTML = ServiceInfo.markup(service);
+    detail.showPopover();
+    const rect = button.getBoundingClientRect();
+    detail.style.left = Math.max(12, Math.min(rect.left, innerWidth - detail.offsetWidth - 12)) + 'px';
+    detail.style.top = Math.max(12, Math.min(rect.bottom + 8, innerHeight - detail.offsetHeight - 12)) + 'px';
+  }
+  rows.addEventListener('pointerover', event => {
+    const button = event.target.closest('[data-service-info]');
+    if (button) showDetail(button);
+  });
+  rows.addEventListener('focusin', event => {
+    const button = event.target.closest('[data-service-info]');
+    if (button) showDetail(button);
+  });
+  rows.addEventListener('click', event => {
+    const button = event.target.closest('[data-service-info]');
+    if (button) showDetail(button);
+  });
+  rows.addEventListener('pointerleave', () => { dismissTimer = setTimeout(() => {
+    if (!detail.matches(':hover') && !detail.contains(document.activeElement) && document.activeElement !== activeService) closeDetail();
+  }, 180); });
+  detail.addEventListener('pointerenter', () => clearTimeout(dismissTimer));
+  detail.addEventListener('pointerleave', () => { dismissTimer = setTimeout(() => {
+    if (!detail.contains(document.activeElement) && document.activeElement !== activeService) closeDetail();
+  }, 180); });
+  document.querySelector('#close-service-detail').addEventListener('click', closeDetail);
+  document.addEventListener('keydown', event => { if (event.key === 'Escape') closeDetail(); });
+  document.addEventListener('pointerdown', event => {
+    if (!detail.contains(event.target) && !event.target.closest('[data-service-info]')) closeDetail();
+  });
+  document.addEventListener('focusin', event => {
+    if (!detail.contains(event.target) && !event.target.closest('[data-service-info]')) closeDetail();
+  });
+  addEventListener('resize', closeDetail);
   const featured = document.querySelector('#featured');
+  const shortcuts = document.querySelector('#category-shortcuts');
+  const bundlePreview = document.querySelector('#featured-bundles');
   category.innerHTML = B.categoryOptions();
+  shortcuts?.addEventListener('click', event => {
+    const button = event.target.closest('[data-category]');
+    if (!button) return;
+    category.value = button.dataset.category;
+    const selected = category.value;
+    filter();
+    [...shortcuts.querySelectorAll('[data-category]')].find(item => item.dataset.category === selected)?.focus({ preventScroll: true });
+  });
+  for (const name of ['click', 'focusin', 'pointerover']) bundlePreview?.addEventListener(name, event => {
+    const button = event.target.closest('[data-service-info]');
+    if (button) showDetail(button);
+  });
   function renderPagination(pageCount) {
     pagination.hidden = pageCount < 2;
     if (pagination.hidden) {
@@ -57,17 +125,20 @@
   }
 
   function render(focusPage = pagination.contains(document.activeElement)) {
-    const services = B.services().filter(item => item.available);
+    closeDetail();
+    const services = B.offerings().filter(item => item.available);
+    if (shortcuts) shortcuts.innerHTML = [...category.options].map(option => '<button type="button" data-category="' + B.safe(option.value) + '" aria-pressed="' + (category.value === option.value) + '">' + B.safe(option.value || 'All services') + '</button>').join('');
+    if (bundlePreview) bundlePreview.innerHTML = B.bundles().filter(b => b.available).slice(0, 4).map(bundle => '<button type="button" class="bundle-preview-item" data-service-info="' + bundle.id + '" aria-controls="service-detail" aria-expanded="false"><strong>' + B.safe(bundle.label) + '</strong><span>' + bundle.serviceIds.length + ' included services</span><span class="bundle-preview-link">View bundle <span class="arrow" aria-hidden="true"></span></span></button>').join('');
     featured.innerHTML = ['urinalysis', 'cbc', 'fbs'].map(id => services.find(item => item.id === id))
-      .filter(Boolean).map(item => '<li><span>' + B.safe(item.label) + '</span><strong>' + B.compactMoney(item.price) + '</strong></li>').join('');
+      .filter(Boolean).map(item => '<li><span>' + B.safe(item.label) + '</span></li>').join('');
     const results = B.search(services, query.value, category.value);
     const pageCount = Math.max(1, Math.ceil(results.length / pageSize));
     page = Math.min(page, pageCount);
     const offset = (page - 1) * pageSize;
     rows.innerHTML = results.slice(offset, offset + pageSize).map(item =>
-      '<tr><th scope="row">' + B.safe(item.label) + '<small>' + B.safe(item.category) + '</small></th><td>' +
-      B.safe(item.category) + '</td><td class="numeric">' + B.compactMoney(item.price) + '</td></tr>'
-    ).join('') || '<tr><td colspan="3" class="empty">No services match your search.</td></tr>';
+      '<tr><th scope="row"><button class="service-name" data-service-info="' + item.id + '" aria-controls="service-detail" aria-expanded="false">' + B.safe(item.label) + '</button><small>' + B.safe(item.category) + '</small></th><td>' +
+      B.safe(item.category) + '</td></tr>'
+    ).join('') || '<tr><td colspan="2" class="empty">No services match your search.</td></tr>';
     const start = offset + 1;
     const end = Math.min(offset + pageSize, results.length);
     const range = start === end ? String(end) : start + '–' + end;

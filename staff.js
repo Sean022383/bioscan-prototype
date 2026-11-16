@@ -8,6 +8,7 @@ const Staff = (() => {
   const activeKey = 'bioscan-prototype:v1:active-role';
   let role = sessionStorage.getItem(activeKey);
   let cancelModal;
+  let headerSignature = '';
 
   function credentialFields() {
     return '<label>Login username<input name="username" autocomplete="username" autocapitalize="none" spellcheck="false"></label>' +
@@ -15,7 +16,10 @@ const Staff = (() => {
   }
 
   function credentialHelp() {
-    return '<p class="quiet">Leave both fields blank to use the selected role. Staff credentials open the role assigned to that account.</p>';
+    return '<p class="quiet">Your account opens the workspace assigned to you.</p>' +
+      '<details class="demo-accounts"><summary>Prototype accounts</summary><p>Use the username as the password.</p><dl>' +
+      '<div><dt>Front desk</dt><dd>pos1</dd></div><div><dt>MedTech</dt><dd>medtech1</dd></div>' +
+      '<div><dt>Clinic Manager</dt><dd>clinic1</dd></div><div><dt>Administrator</dt><dd>admin1</dd></div></dl></details>';
   }
 
   async function passwordHash(password, salt) {
@@ -37,22 +41,23 @@ const Staff = (() => {
     if (!username || /\s/.test(username)) throw Error('Enter a login username without spaces.');
     if (!password.trim()) throw Error('Enter a password.');
     if (!Object.hasOwn(B.roles, accountRole)) throw Error('Select a staff role.');
+    const serviceIds = accountRole === 'medtech' ? data.getAll('assignedService') : [];
+    if (accountRole === 'medtech' && !serviceIds.length) throw Error('Assign at least one service to the MedTech.');
     const salt = btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(16))));
     const hash = await passwordHash(password, salt);
     return B.update(state => {
       if (state.staffAccounts.some(account => account.username.toLowerCase() === username.toLowerCase()))
         throw Error('That login username is already in use.');
-      state.staffAccounts.push({ fullName, username, role: accountRole, salt, hash });
+      state.staffAccounts.push({ fullName, username, role: accountRole, salt, hash, serviceIds });
       B.audit(state, B.roles.admin, 'Staff account created', username + ' · ' + B.roles[accountRole]);
       return fullName;
     });
   }
 
-  async function authenticate(form, selectedRole) {
+  async function authenticate(form) {
     const data = new FormData(form);
     const username = data.get('username').trim().toLowerCase();
     const password = data.get('password');
-    if (!username && !password) return { role: selectedRole, username: '' };
     if (!username || !password) throw Error('Enter both your login username and password.');
     const account = B.read().staffAccounts.find(entry => entry.username.toLowerCase() === username);
     if (!account || account.active === false || await passwordHash(password, account.salt) !== account.hash)
@@ -62,7 +67,8 @@ const Staff = (() => {
 
   const permissionLabels = {
     cashier: { profiles: 'Find matching Client Profiles', payment: 'Finalize sales', receipts: 'Print and retrieve receipts' },
-    manager: { profiles: 'Browse Client Profiles', coupons: 'Manage Coupons', reports: 'View and export reports' }
+    manager: { profiles: 'Browse Client Profiles', services: 'Create and edit diagnostic services and bundles', coupons: 'Manage Coupons', reports: 'View and export reports' },
+    medtech: { care: 'View assigned-service patients and record completion or referrals' }
   };
 
   function allowed(role, permission) {
@@ -74,6 +80,8 @@ const Staff = (() => {
     const fullName = values.get('fullName').trim().replace(/\s+/g, ' ');
     const role = values.get('role');
     if (!fullName || !Object.hasOwn(B.roles, role)) throw Error('Enter a name and choose a role.');
+    const serviceIds = role === 'medtech' ? values.getAll('assignedService') : [];
+    if (role === 'medtech' && !serviceIds.length) throw Error('Assign at least one service to the MedTech.');
     const password = values.get('password');
     let reset = {};
     if (password) {
@@ -83,7 +91,7 @@ const Staff = (() => {
     await B.update(state => {
       const account = state.staffAccounts.find(item => item.username === username);
       if (!account) throw Error('This staff account is no longer available.');
-      Object.assign(account, { fullName, role, active: values.has('active'), ...reset });
+      Object.assign(account, { fullName, role, serviceIds, active: values.has('active'), ...reset });
       B.audit(state, B.roles.admin, 'Staff account updated', username + ' · ' + B.roles[role]);
     });
   }
@@ -116,6 +124,7 @@ const Staff = (() => {
     }
     if (!modal.open) modal.showModal();
     const firstField = modal.querySelector('form input:not([type="hidden"]), form select, form textarea');
+    if (form) { Medtech.bindAssignments(form); B.bindHealth(form); }
     (firstField ?? modal.querySelector('[data-dialog-close]')).focus();
   }
 
@@ -133,10 +142,10 @@ const Staff = (() => {
   });
 
   function renderSignIn() {
+    headerSignature = '';
     account.innerHTML = '<a href="index.html">Public website</a>';
     app.innerHTML = '<div class="sign-in-layout"><div class="sign-in-intro"><h1>Staff Sign In</h1>' +
-      '<p>Choose the staff account for this workstation.</p></div><form id="sign-in" class="panel sign-in-form">' +
-      '<label>Staff role<select name="role">' + roleOptions(Object.keys(B.roles)) + '</select></label>' +
+      '<p>Sign in to your BioScan workspace.</p></div><form id="sign-in" class="panel sign-in-form">' +
       credentialFields() + credentialHelp() + '<p class="message" role="status"></p>' +
       '<button class="button primary" type="submit">Sign In <span class="arrow" aria-hidden="true"></span></button></form></div>';
     const form = app.querySelector('form');
@@ -148,12 +157,13 @@ const Staff = (() => {
       button.disabled = true;
       B.message(message, '');
       try {
-        const identity = await authenticate(form, form.elements.role.value);
+        const identity = await authenticate(form);
         role = identity.role;
         sessionStorage.setItem('bioscan-prototype:v1:staff-identity', JSON.stringify(identity));
         form.reset();
         sessionStorage.setItem(activeKey, role);
         Management.reset();
+        Medtech.reset();
         render(true);
       } catch (error) {
         B.message(message, error.message, true);
@@ -164,7 +174,11 @@ const Staff = (() => {
 
   function validateSession() {
     const identity = JSON.parse(sessionStorage.getItem('bioscan-prototype:v1:staff-identity') || 'null');
-    if (!identity?.username) return true;
+    if (!identity?.username) {
+      role = null;
+      sessionStorage.removeItem(activeKey);
+      return false;
+    }
     const current = B.read().staffAccounts.find(item => item.username === identity.username);
     if (current && current.active !== false && current.role === role) return true;
     role = null;
@@ -179,15 +193,9 @@ const Staff = (() => {
     app.onchange = null;
     if (!Object.hasOwn(B.roles, role)) renderSignIn();
     else {
-      account.innerHTML = '<span class="account-role">' + B.roles[role] +
-        '</span><button class="button staff-switch small" type="button">Switch Account</button>';
-      account.querySelector('button').addEventListener('click', () => {
-        role = null;
-        sessionStorage.removeItem(activeKey);
-        sessionStorage.removeItem('bioscan-prototype:v1:staff-identity');
-        render(true);
-      });
+      renderAccount();
       if (role === 'cashier') Cashier.open();
+      else if (role === 'medtech') Medtech.render();
       else Management.render(role);
     }
     if (focus) {
@@ -197,15 +205,47 @@ const Staff = (() => {
     }
   }
 
+  function renderAccount() {
+    const state = B.read();
+    const identity = JSON.parse(sessionStorage.getItem('bioscan-prototype:v1:staff-identity') || 'null');
+    const user = state.staffAccounts.find(item => item.username === identity?.username);
+    if (!user) return;
+    const assigned = B.services(state).filter(s => (user.serviceIds || []).includes(s.id));
+    const signature = JSON.stringify([user.username, user.fullName, user.role, assigned.map(s => [s.id, s.label, s.category])]);
+    if (signature === headerSignature) return;
+    headerSignature = signature;
+    const categories = [...new Set(assigned.map(s => s.category))].sort(B.alphabetical);
+    account.innerHTML = '<details class="staff-profile"><summary aria-label="View profile for ' + B.safe(user.fullName) + '"><span class="staff-profile-name">' + B.safe(user.fullName) + '</span><small class="staff-person-role">' + B.roles[user.role] + '</small></summary>' +
+      '<section class="staff-profile-panel" aria-label="Staff profile"><h2>' + B.safe(user.fullName) + '</h2><p>' + B.safe(user.username) + ' · ' + B.roles[user.role] + '</p>' +
+      (user.role === 'medtech' ? '<h3>Assigned services (' + assigned.length + ')</h3>' + (categories.length ? categories.map(category => '<h4>' + B.safe(category) + '</h4><ul>' + assigned.filter(s => s.category === category).map(s => '<li>' + B.safe(s.label) + '</li>').join('') + '</ul>').join('') : '<p>No services assigned. Ask the Administrator to update your account.</p>') :
+      '<p>Your workspace provides the tools assigned to this role.</p>') + '</section></details>' +
+      '<button class="button staff-switch small" type="button">Switch Account</button>';
+    const profile = account.querySelector('.staff-profile');
+    profile.addEventListener('pointerenter', event => { if (event.pointerType === 'mouse') profile.open = true; });
+    profile.addEventListener('pointerleave', () => { if (!profile.contains(document.activeElement)) profile.open = false; });
+    profile.addEventListener('focusout', event => { if (!profile.contains(event.relatedTarget)) profile.open = false; });
+    profile.addEventListener('keydown', event => { if (event.key === 'Escape') { profile.open = false; event.stopPropagation(); } });
+    account.querySelector('.staff-switch').addEventListener('click', () => {
+      role = null;
+      sessionStorage.removeItem(activeKey);
+      sessionStorage.removeItem('bioscan-prototype:v1:staff-identity');
+      render(true);
+    });
+  }
+
   addEventListener('storage', event => {
     if (event.key !== B.key) return;
     if (!validateSession()) { render(true); return; }
+    renderAccount();
     if (role === 'cashier') Cashier.sync();
+    if (role === 'medtech') Medtech.render();
     if (role === 'manager' || role === 'admin') Management.sync(role);
   });
   setInterval(async () => {
     if (!Object.hasOwn(B.roles, role)) return;
     if (!validateSession()) { render(true); return; }
+    renderAccount();
+    if (role === 'medtech') { Medtech.render(); return; }
     try {
       if (await Recovery.tick(role)) {
         if (role === 'cashier') Cashier.sync();
