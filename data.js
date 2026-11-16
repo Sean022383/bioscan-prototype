@@ -237,6 +237,34 @@ const Bioscan = (() => {
       (bookings || '<p class="empty">No reservations.</p>') + '</section></div></div>';
   }
 
+  function reservationSummary(state, reservation) {
+    const client = state.profiles.find(p => p.id === reservation.clientId);
+    const payments = state.sales.filter(s => s.reservation === reservation.code).map(s => effectiveSale(state, s));
+    const messages = state.sms.filter(s => s.reservation === reservation.code).slice().sort((a, b) => b.at.localeCompare(a.at));
+    const field = (label, value) => '<div><dt>' + safe(label) + '</dt><dd>' + safe(value ?? 'Not recorded') + '</dd></div>';
+    const items = reservation.items || [];
+    return '<div class="client-profile-view"><div class="profile-overview"><section><h3>Booking details</h3><dl class="detail-list">' +
+      field('Reservation code', reservation.code) + field('Status', reservationStatus(reservation)) +
+      field('Appointment', appointment(reservation.date, reservation.time)) + field('Payment', payments.length ? 'Paid' : 'No finalized payment') +
+      '</dl></section><section><h3>Client information</h3><dl class="detail-list">' +
+      field('Full name', client?.fullName) + field('Client ID', reservation.clientId) + field('Mobile number', client?.mobile) +
+      field('Age', client?.age) + field('Sex', client?.sex) + '</dl></section></div>' +
+      '<div class="profile-history"><section><h3>Reserved services</h3><div class="table-wrap"><table><thead><tr><th scope="col">Service</th><th scope="col">Amount</th></tr></thead><tbody>' +
+      items.map(item => '<tr><td>' + safe(item.label) + (item.bundleLabel ? '<small>Part of ' + safe(item.bundleLabel) + '</small>' : '') + '</td><td>' + money(item.price) + '</td></tr>').join('') +
+      '</tbody></table></div><dl class="detail-list">' + field('Estimated service total', money(items.reduce((sum, item) => sum + item.price, 0))) + '</dl>' +
+      '<h3>Recorded payment</h3>' + (payments.map(sale => '<dl class="detail-list">' + field('Transaction number', sale.id) +
+        field('Payment recorded', stamp(sale.at)) + field('Subtotal', money(sale.subtotal)) + field(sale.label || 'Discount', money(sale.amount || 0)) +
+        field('Total paid', money(sale.due)) + field('Payment method', sale.method === 'cash' ? 'Cash' : 'E-wallet · ' + (sale.provider || 'Not recorded')) +
+        (sale.reference ? field('Reference number', sale.reference) : '') + '</dl>').join('') || '<p class="quiet">No finalized payment for this reservation.</p>') +
+      '</section><section><h3>Consent and preparation</h3><dl class="detail-list">' +
+      field('Data-use agreement', reservation.consent?.data ? 'Agreed' : 'Not recorded') +
+      field('Preparation acknowledgment', reservation.consent?.preparation ? 'Acknowledged' : 'Not recorded') +
+      field('Recorded at', reservation.consent?.at ? stamp(reservation.consent.at) : null) + '</dl>' +
+      (reservation.health ? healthSummary(reservation.health) : '<p class="quiet">No health information recorded for this reservation.</p>') +
+      '<h3>SMS history</h3>' + (messages.map(sms => '<details class="profile-record"><summary>' + safe(sms.type) + ' · ' + safe(sms.status) + '</summary><div class="profile-record-body"><p>' + safe(sms.message) + '</p><p class="quiet">' + safe(sms.mobile) + ' · ' + safe(stamp(sms.at)) + '</p></div></details>').join('') || '<p class="quiet">No SMS records for this reservation.</p>') +
+      '</section></div></div>';
+  }
+
   function read() {
     const current = JSON.parse(localStorage.getItem(key) || 'null') ?? initial();
     current.staffAccounts ??= [];
@@ -459,7 +487,7 @@ const Bioscan = (() => {
   return { name, address, key, roles, times, catalog, money, compactMoney, safe, uid, day, dateKey, dateLabel,
     timeLabel, stamp, appointment, read, update, nextReceiptQueue, services, bundles, offerings, expandIds, serviceLines, search, categoryOptions, validSlot,
     reservationStatus, filterReservations, alphabetical, findOrCreateClient, clientFields, clientDetails, bindHealth, healthSummary, audit, status, message,
-    notify, scheduleBlocks, reservationImpact, effectiveSale, paymentIssue, clientSummary };
+    notify, scheduleBlocks, reservationImpact, effectiveSale, paymentIssue, clientSummary, reservationSummary };
 })();
 
 setInterval(() => Bioscan.read(), 60000);

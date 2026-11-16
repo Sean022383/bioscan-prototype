@@ -39,3 +39,5 @@ The homepage leads with a split introduction and the user-confirmed real clinic 
 The public header is sticky. The theme control is icon-only at every width, with its accessible label and tooltip retained. A bottom reservation action stays visible on mobile homepage screens; back-to-top sits above it. Reservation pages inherit the modern typography and surfaces while preserving the existing form steps, consent, preparation details, and pricing behavior.
 
 Verified light/dark homepage layouts at desktop and 390px mobile width, category filtering, bundle details, reservation navigation, booking summary totals, and no page overflow.
+
+Reservation date shortcuts provide Today and All dates while preserving name/code and status filters. Codes are underlined buttons opening a wide responsive read-only booking dialog. The dialog groups booking/client information, services/payment, and consent/health/SMS, with a sticky Close header and a single column on mobile.

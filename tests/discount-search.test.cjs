@@ -58,3 +58,18 @@ test('health details show only supplied text, preserve unknown, and escape marku
   assert.ok(result.includes('&lt;script&gt;'));
   assert.ok(!result.includes('Provide details'));
 });
+
+test('reservation details include only linked payments and SMS and escape supplied text', () => {
+  const {B}=fixture();
+  const reservation={code:'BS-VIEW',clientId:'CLIENT',date:B.day(),time:'08:00',status:'Completed',items:[{label:'CBC',price:28000,bundleLabel:'Sample bundle'}],consent:{data:true,preparation:true,at:new Date().toISOString()},health:{conditions:'Provide details',conditionsDetails:'<unsafe>'}};
+  const state={profiles:[{id:'CLIENT',fullName:'Ana <sample>',mobile:'09170000000'}],sales:[
+    {id:'TX-LINKED',reservation:'BS-VIEW',at:new Date().toISOString(),subtotal:28000,amount:5600,due:22400,method:'cash',label:'PWD'},
+    {id:'TX-OTHER',reservation:'BS-OTHER'}],corrections:[],sms:[{reservation:'BS-VIEW',type:'Confirmation',status:'Delivered',message:'Selected booking message',mobile:'09170000000',at:new Date().toISOString()},
+      {reservation:'BS-OTHER',message:'Unrelated message'}]};
+  const markup=B.reservationSummary(state,reservation);
+  for(const text of ['BS-VIEW','Ana &lt;sample&gt;','Sample bundle','TX-LINKED','₱224.00','PWD','Selected booking message','Acknowledged','&lt;unsafe&gt;']) assert.ok(markup.includes(text),text);
+  for(const text of ['TX-OTHER','Unrelated message','<unsafe>','Provide details']) assert.ok(!markup.includes(text),text);
+  const unpaid=B.reservationSummary({...state,sales:[],sms:[]},reservation);
+  assert.ok(unpaid.includes('No finalized payment'));
+  assert.ok(unpaid.includes('No SMS records'));
+});

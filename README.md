@@ -109,3 +109,5 @@ The client homepage now uses the approved modern white/emerald design, sans-seri
 
 
 Reservation lists support case-insensitive code or client-name searches alongside date and status filters. The cashier Find Reservation also accepts a code or name; name/partial-code matches require selecting the correct client, appointment, and code before retrieval. Non-confirmed bookings remain unavailable for a new checkout. Health profile summaries show supplied details directly without the Provide details prefix.
+
+Manager and Administrator Reservation lists include Today (Philippine time) and All dates shortcuts. These change the date filter while preserving the current name/code search and status selection. Click a Reservation Code to open a large booking-details window with the client, appointment/status, reserved service and bundle amounts, linked payment, recorded consent, booking health information, and SMS history for that reservation.

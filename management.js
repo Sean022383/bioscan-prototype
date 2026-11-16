@@ -82,6 +82,12 @@ const Management = (() => {
     region.querySelector('[data-create-staff]')?.addEventListener('click', () => createStaff(role));
     region.querySelectorAll('[data-review]').forEach(button => button.addEventListener('click', () => review(role, button.dataset.review)));
     region.querySelectorAll('[data-reschedule]').forEach(button => button.addEventListener('click', () => reschedule(role, button.dataset.reschedule)));
+    region.querySelectorAll('[data-reservation-view]').forEach(button => button.addEventListener('click', () => {
+      const state = B.read();
+      const reservation = state.reservations.find(item => item.code === button.dataset.reservationView);
+      if (!reservation) { announce('This reservation is no longer available.', true); return; }
+      Staff.dialog('Reservation · ' + reservation.code, B.reservationSummary(state, reservation));
+    }));
     region.querySelectorAll('[data-cancel]').forEach(button => button.addEventListener('click', () => cancelReservation(role, button.dataset.cancel)));
     region.querySelectorAll('#service-admin-list [data-service]').forEach(button => button.addEventListener('click', () => editService(role, button.dataset.service)));
     region.querySelector('[data-capacity]')?.addEventListener('click', () => editCapacity(role));
@@ -94,6 +100,11 @@ const Management = (() => {
       reservationStatus = event.target.value;
       draw(role);
       region.querySelector('#reservation-status').focus();
+    });
+    for (const id of ['reservation-today', 'reservation-all-dates']) region.querySelector('#' + id)?.addEventListener('click', () => {
+      reservationDate = id === 'reservation-today' ? B.day() : '';
+      draw(role);
+      region.querySelector('#' + id).focus();
     });
     region.querySelector('#reservation-search')?.addEventListener('input', event => {
       reservationQuery = event.target.value;
@@ -170,10 +181,11 @@ const Management = (() => {
     return note('Filter Reservations by appointment date and status. Authorized staff can reschedule or cancel a Confirmed Reservation.') +
       '<label>Find reservation<input id="reservation-search" type="search" placeholder="Reservation code or client name" value="' + B.safe(reservationQuery) + '"></label><div class="reservation-filters"><label>Appointment date<input id="reservation-filter" type="date" value="' + B.safe(reservationDate) +
       '"></label><label>Status<select id="reservation-status"><option value="">All statuses</option>' + ['Cancelled', 'Completed', 'Confirmed', 'No-Show'].map(status => '<option' + (reservationStatus === status ? ' selected' : '') + '>' + status + '</option>').join('') + '</select></label></div>' +
+      '<div class="actions reservation-date-shortcuts"><button type="button" class="button secondary small" id="reservation-today" aria-pressed="' + (reservationDate === B.day()) + '">Today</button><button type="button" class="button secondary small" id="reservation-all-dates" aria-pressed="' + !reservationDate + '">All dates</button></div>' +
       '<p class="quiet section-note" role="status">' + records.length + (records.length === 1 ? ' reservation' : ' reservations') + '</p>' + table(['Reservation Code', 'Client', 'Appointment', 'Status', 'Actions'], records.map(item => {
         const status = B.reservationStatus(item);
         const client = state.profiles.find(profile => profile.id === item.clientId);
-        return [B.safe(item.code), B.safe(client?.fullName ?? ''), B.appointment(item.date, item.time), B.status(status),
+        return ['<button type="button" class="link-button" data-reservation-view="' + B.safe(item.code) + '" aria-label="View reservation ' + B.safe(item.code) + '">' + B.safe(item.code) + '</button>', B.safe(client?.fullName ?? ''), B.appointment(item.date, item.time), B.status(status),
           status === 'Confirmed' ? '<div class="inline-actions"><button class="button secondary small" data-reschedule="' + item.code +
           '">Reschedule</button><button class="link-button" data-cancel="' + item.code + '">Cancel</button></div>' : ''];
       }), 'No Reservations for this selection.');

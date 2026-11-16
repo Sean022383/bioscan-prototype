@@ -542,6 +542,8 @@ dialog form .actions { justify-content: flex-end; }
 .care-table td:nth-child(4) { min-width: 150px; }
 .care-scroll-hint { display: none; }
 .reservation-filters { display: grid; grid-template-columns: repeat(2, minmax(0, 260px)); gap: 16px; margin-bottom: 16px; }
+.reservation-date-shortcuts { margin-bottom: 16px; }
+.reservation-date-shortcuts [aria-pressed="true"] { background: var(--tint); border-color: var(--green); }
 dialog:has(.bundle-builder), dialog:has(.health-disclosure) { width: min(920px, calc(100% - 30px)); }
 dialog:has(.bundle-builder) .dialog-title { position: sticky; top: -20px; z-index: 2; background: var(--surface); padding-top: 14px; }
 dialog:has(textarea[name="preparation"]) { width: min(720px, calc(100% - 30px)); }
