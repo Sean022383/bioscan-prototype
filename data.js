@@ -76,6 +76,16 @@ const Bioscan = (() => {
     return [parts.year, parts.month, parts.day].join('-');
   }
   const day = (offset = 0) => dateKey(new Date(Date.now() + offset * 86400000));
+  function nextReceiptQueue(state, at = new Date()) {
+    const date = dateKey(at);
+    const counter = state.receiptQueueCounter;
+    const last = counter?.date === date ? counter.lastNumber : 0;
+    if (!Number.isSafeInteger(last) || last < 0 || !Number.isSafeInteger(last + 1))
+      throw Error('The daily queue counter is invalid. Ask the Administrator to review it.');
+    const number = last + 1;
+    state.receiptQueueCounter = { date, lastNumber: number };
+    return { date, number };
+  }
   function dateLabel(date) {
     return new Intl.DateTimeFormat('en-PH', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Manila' })
       .format(new Date(date + 'T12:00:00+08:00'));
@@ -436,7 +446,7 @@ const Bioscan = (() => {
     target.classList.toggle('error', error);
   }
   return { name, address, key, roles, times, catalog, money, compactMoney, safe, uid, day, dateKey, dateLabel,
-    timeLabel, stamp, appointment, read, update, services, bundles, offerings, expandIds, serviceLines, search, categoryOptions, validSlot,
+    timeLabel, stamp, appointment, read, update, nextReceiptQueue, services, bundles, offerings, expandIds, serviceLines, search, categoryOptions, validSlot,
     reservationStatus, filterReservations, alphabetical, findOrCreateClient, clientFields, clientDetails, bindHealth, healthSummary, audit, status, message,
     notify, scheduleBlocks, reservationImpact, effectiveSale, paymentIssue, clientSummary };
 })();

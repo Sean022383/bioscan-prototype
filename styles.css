@@ -827,3 +827,7 @@ html:has(.client-site) { scroll-padding-top: 110px; }
   html:has(.client-site) { scroll-padding-top: 132px; }
 }
 @media print { .mobile-reserve { display: none; } .client-site .public-header { position: static; } }
+.receipt-queue { display: grid; justify-items: center; gap: 4px; padding: 14px 0; margin: 12px 0; border-block: 1px dashed var(--line-strong); }
+.receipt-queue > span { font-size: .85rem; font-weight: 650; }
+.receipt-queue > strong { font-size: 2.4rem; font-weight: 750; line-height: 1.1; font-variant-numeric: tabular-nums; }
+@media print { .receipt-queue { break-inside: avoid; color: #000; border-color: #555; } }

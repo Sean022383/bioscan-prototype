@@ -18,6 +18,8 @@ Credentials choose the workspace. Keep the current sale visible at checkout. Bot
 
 Bundle prices are configurable. Financial lines retain their constituent service IDs, bundle label, and exact allocated amounts. Removing a bundled item removes its complete bundle. MedTech entries remain per service; reservation payment status and clinical service completion are separate.
 
+Receipts display a centered numeric queue reference between the receipt heading and transaction details. Allocate one number only after a successful checkout; the first sale on each Philippine calendar day starts at 1. Store the original number and date with the receipt so reopening and reprinting cannot issue another number. Keep only the current daily counter, with no separate queue list or history. Older receipts without this reference omit the block.
+
 ## Verification
 
 Reviewed the new editor on desktop and at 390px mobile width. Checked overflow, service visibility, configurable prices, duplicate prevention, role access, and public preparation rendering. Existing chart grid lines and the warm palette are intentional parts of the established interface.

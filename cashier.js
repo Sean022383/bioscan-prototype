@@ -460,6 +460,7 @@ const Cashier = (() => {
           const sale = { ...total, id: B.uid('TX'), draftId: draft.id, clientId: draft.clientId,
             client: client.fullName, reservation: draft.reservation, items: draft.items, method, received,
             change: received - total.due, reference, provider, verified: !cash, at: new Date().toISOString(), prints: 0, source: databaseSource };
+          sale.receiptQueue = B.nextReceiptQueue(current, new Date(sale.at));
           current.sales.push(sale);
           if (!cash) B.audit(current, B.roles.cashier, 'E-wallet payment verified', sale.id + ' · ' + provider);
           B.audit(current, B.roles.cashier, 'Transaction finalized', sale.id);
@@ -473,7 +474,7 @@ const Cashier = (() => {
         draft = null;
         save();
         sessionStorage.setItem(lastKey, result.id);
-        say('Payment recorded. Transaction ' + result.id + ' finalized.');
+        say('Payment recorded. Queue number ' + result.receiptQueue.number + '. Transaction ' + result.id + ' finalized.');
         refresh();
         receipt(result);
         return false;
@@ -500,7 +501,8 @@ const Cashier = (() => {
   function receiptMarkup(sale) {
     const line = (label, value) => '<div><dt>' + B.safe(label) + '</dt><dd>' + B.safe(value) + '</dd></div>';
     return '<article class="receipt"><header><strong>' + B.name + '</strong><h3>Non-BIR Transaction Receipt</h3>' +
-      (sale.prints ? '<p class="reprint">REPRINT</p>' : '') + '</header><dl>' +
+      (sale.prints ? '<p class="reprint">REPRINT</p>' : '') + '</header>' +
+      (sale.receiptQueue ? '<section class="receipt-queue" aria-label="Queue number"><span>Queue number</span><strong>' + B.safe(sale.receiptQueue.number) + '</strong></section>' : '') + '<dl>' +
       line('Transaction Number', sale.id) + line('Date and time', B.stamp(sale.at)) + line('Client', sale.client) +
       (sale.reservation ? line('Reservation Code', sale.reservation) : '') +
       '</dl><ul>' + sale.items.map(item => '<li><span>' + B.safe(item.label) + (item.bundleLabel ? '<small>Part of ' + B.safe(item.bundleLabel) + '</small>' : '') + '</span><strong>' +
