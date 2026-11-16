@@ -38,7 +38,7 @@
     top.setAttribute('aria-label', 'Back to top');
     top.title = 'Back to top';
     top.hidden = true;
-    top.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m6 12 6-6 6 6M12 6v14M5 3h14"/></svg><span>Back to top</span>';
+    top.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m6 12 6-6 6 6M12 6v14M5 3h14"/></svg>';
     top.addEventListener('click', () => {
       scrollTo({ top: 0, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
       document.querySelector('main')?.focus({ preventScroll: true });

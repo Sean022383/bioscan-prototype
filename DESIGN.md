@@ -8,7 +8,7 @@ Use the shared CSS variables in styles.css. Paper is #f8f6ef, surface #fffdf7, p
 
 ## Public directory and reservations
 
-Service-name buttons expose descriptions, prices, and preparation through hover, keyboard focus, or tap. Popovers remain inside the viewport, scroll when needed, and support Close and Escape. No source citations are rendered in service details. Bundles share the directory and booking selection with individual services, with a dedicated category filter. A bundle's included services and preparation remain explicit.
+Service-name buttons include an info icon and expose descriptions, prices, and preparation only on click, tap, Enter, or Space. Hover and focus alone never open details. Popovers remain inside the viewport, scroll when needed, and support Close and Escape. No source citations are rendered in service details. Bundles share the directory and booking selection with individual services, with a dedicated category filter. A bundle's included services and preparation remain explicit.
 
 Reservation forms stack on narrow screens. Optional health fields default to Unknown and permit Prefer not to say. Additional text appears only when the client chooses Provide details. Use the same health controls in walk-in registration and preserve consent context appropriate to each flow.
 
@@ -30,7 +30,7 @@ Patient Care filters use Category, Service, and text search controls with explic
 
 The default light theme preserves the existing clinic identity. Optional dark mode uses deep green surfaces, pale text, mint actions with dark action text, and readable success/warning/error states. The theme is selected in the header, saved separately from clinic records, and shared across public, reservation, and staff pages. Print styles restore light colors. The pictured common-test preview contains service names only; diagnostic details and checkout retain their prices.
 
-Back to top appears after 400px of page scrolling. It supports reduced-motion preferences and returns focus to the main content. On mobile it uses an accessible icon button to limit obstruction.
+Back to top appears after 400px of page scrolling. It supports reduced-motion preferences and returns focus to the main content. It uses an accessible icon-only button at all screen widths.
 
 ## Modern client website
 

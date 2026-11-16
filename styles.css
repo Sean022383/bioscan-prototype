@@ -651,7 +651,9 @@ dialog:has(.client-profile-view) .dialog-title { position: sticky; top: -20px; z
 .staff-account { margin-left: auto; }
 .staff-header .theme-toggle { color: var(--white); background: transparent; border-color: var(--dark-line); }
 .staff-header .theme-toggle:hover { background: #244b3e; color: var(--white); }
-.back-to-top { position: fixed; bottom: 24px; right: 24px; z-index: 15; min-height: 46px; background: var(--surface); border-color: var(--line-strong); }
+.back-to-top { position: fixed; bottom: 24px; right: 24px; z-index: 15; width: 46px; height: 46px; padding: 10px; background: var(--surface); border-color: var(--line-strong); }
+.service-info-icon { display: inline-block; vertical-align: middle; flex-shrink: 0; color: var(--green); }
+.service-name .service-info-icon { margin-inline-start: 5px; }
 html { scrollbar-color: var(--line-strong) var(--paper); }
 input, textarea { caret-color: var(--ink); }
 input[type="checkbox"], input[type="radio"] { accent-color: var(--green); }

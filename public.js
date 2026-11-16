@@ -32,15 +32,16 @@
   let page = 1;
   const detail = document.querySelector('#service-detail');
   let activeService;
-  let dismissTimer;
-  function closeDetail() {
-    clearTimeout(dismissTimer);
+  const infoIcon = '<svg class="service-info-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7v2"/></svg>';
+  function closeDetail(restoreFocus = false) {
+    const trigger = activeService;
     activeService?.setAttribute('aria-expanded', 'false');
     detail.hidePopover();
     activeService = null;
+    if (restoreFocus) trigger?.focus({ preventScroll: true });
   }
   function showDetail(button) {
-    clearTimeout(dismissTimer);
+    if (activeService === button && detail.matches(':popover-open')) { closeDetail(); return; }
     const service = B.offerings().find(item => item.id === button.dataset.serviceInfo);
     if (!service) return;
     activeService?.setAttribute('aria-expanded', 'false');
@@ -52,35 +53,27 @@
     const rect = button.getBoundingClientRect();
     detail.style.left = Math.max(12, Math.min(rect.left, innerWidth - detail.offsetWidth - 12)) + 'px';
     detail.style.top = Math.max(12, Math.min(rect.bottom + 8, innerHeight - detail.offsetHeight - 12)) + 'px';
+    document.querySelector('#close-service-detail').focus({ preventScroll: true });
   }
-  rows.addEventListener('pointerover', event => {
-    const button = event.target.closest('[data-service-info]');
-    if (button) showDetail(button);
-  });
-  rows.addEventListener('focusin', event => {
-    const button = event.target.closest('[data-service-info]');
-    if (button) showDetail(button);
-  });
   rows.addEventListener('click', event => {
     const button = event.target.closest('[data-service-info]');
     if (button) showDetail(button);
   });
-  rows.addEventListener('pointerleave', () => { dismissTimer = setTimeout(() => {
-    if (!detail.matches(':hover') && !detail.contains(document.activeElement) && document.activeElement !== activeService) closeDetail();
-  }, 180); });
-  detail.addEventListener('pointerenter', () => clearTimeout(dismissTimer));
-  detail.addEventListener('pointerleave', () => { dismissTimer = setTimeout(() => {
-    if (!detail.contains(document.activeElement) && document.activeElement !== activeService) closeDetail();
-  }, 180); });
-  document.querySelector('#close-service-detail').addEventListener('click', closeDetail);
-  document.addEventListener('keydown', event => { if (event.key === 'Escape') closeDetail(); });
+  document.querySelector('#close-service-detail').addEventListener('click', () => closeDetail(true));
+  document.addEventListener('keydown', event => { if (event.key === 'Escape' && activeService) closeDetail(true); });
+  detail.addEventListener('toggle', () => {
+    if (!detail.matches(':popover-open')) {
+      activeService?.setAttribute('aria-expanded', 'false');
+      activeService = null;
+    }
+  });
   document.addEventListener('pointerdown', event => {
     if (!detail.contains(event.target) && !event.target.closest('[data-service-info]')) closeDetail();
   });
   document.addEventListener('focusin', event => {
     if (!detail.contains(event.target) && !event.target.closest('[data-service-info]')) closeDetail();
   });
-  addEventListener('resize', closeDetail);
+  addEventListener('resize', () => closeDetail());
   const featured = document.querySelector('#featured');
   const shortcuts = document.querySelector('#category-shortcuts');
   const bundlePreview = document.querySelector('#featured-bundles');
@@ -93,7 +86,7 @@
     filter();
     [...shortcuts.querySelectorAll('[data-category]')].find(item => item.dataset.category === selected)?.focus({ preventScroll: true });
   });
-  for (const name of ['click', 'focusin', 'pointerover']) bundlePreview?.addEventListener(name, event => {
+  bundlePreview?.addEventListener('click', event => {
     const button = event.target.closest('[data-service-info]');
     if (button) showDetail(button);
   });
@@ -128,7 +121,7 @@
     closeDetail();
     const services = B.offerings().filter(item => item.available);
     if (shortcuts) shortcuts.innerHTML = [...category.options].map(option => '<button type="button" data-category="' + B.safe(option.value) + '" aria-pressed="' + (category.value === option.value) + '">' + B.safe(option.value || 'All services') + '</button>').join('');
-    if (bundlePreview) bundlePreview.innerHTML = B.bundles().filter(b => b.available).slice(0, 4).map(bundle => '<button type="button" class="bundle-preview-item" data-service-info="' + bundle.id + '" aria-controls="service-detail" aria-expanded="false"><strong>' + B.safe(bundle.label) + '</strong><span>' + bundle.serviceIds.length + ' included services</span><span class="bundle-preview-link">View bundle <span class="arrow" aria-hidden="true"></span></span></button>').join('');
+    if (bundlePreview) bundlePreview.innerHTML = B.bundles().filter(b => b.available).slice(0, 4).map(bundle => '<button type="button" class="bundle-preview-item" data-service-info="' + bundle.id + '" aria-controls="service-detail" aria-expanded="false"><strong>' + B.safe(bundle.label) + ' ' + infoIcon + '</strong><span>' + bundle.serviceIds.length + ' included services</span><span class="bundle-preview-link">View bundle <span class="arrow" aria-hidden="true"></span></span></button>').join('');
     featured.innerHTML = ['urinalysis', 'cbc', 'fbs'].map(id => services.find(item => item.id === id))
       .filter(Boolean).map(item => '<li><span>' + B.safe(item.label) + '</span></li>').join('');
     const results = B.search(services, query.value, category.value);
@@ -136,7 +129,7 @@
     page = Math.min(page, pageCount);
     const offset = (page - 1) * pageSize;
     rows.innerHTML = results.slice(offset, offset + pageSize).map(item =>
-      '<tr><th scope="row"><button class="service-name" data-service-info="' + item.id + '" aria-controls="service-detail" aria-expanded="false">' + B.safe(item.label) + '</button><small>' + B.safe(item.category) + '</small></th><td>' +
+      '<tr><th scope="row"><button type="button" class="service-name" data-service-info="' + item.id + '" aria-controls="service-detail" aria-expanded="false">' + B.safe(item.label) + ' ' + infoIcon + '</button><small>' + B.safe(item.category) + '</small></th><td>' +
       B.safe(item.category) + '</td></tr>'
     ).join('') || '<tr><td colspan="2" class="empty">No services match your search.</td></tr>';
     const start = offset + 1;
